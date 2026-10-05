@@ -8,6 +8,8 @@ No Feishu app or user has granted these permissions to this project. This docume
 | DOCX/Wiki/Base metadata search | search:docs:read | [Official CLI Drive search](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/drive/drive_search.go) |
 | Single-room busy intervals | calendar:calendar.free_busy:read | [Official calendar catalog](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/calendar.json) |
 | Tasks assigned to current identity | task:task:read | [Official task catalog](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/task.json) |
+| Task search by explicit assignee | task:task:read | [Official user-only task search](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/task/task_search.go) |
+| Tasklist discovery and tasklist tasks | task:tasklist:read | [Official task catalog](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/task.json) |
 | File/DOCX metadata batch | drive:drive.metadata:readonly | [Official Drive catalog](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/drive.json) |
 | Comment reply pages | docs:document.comment:read | [Official Drive catalog](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/drive.json) |
 

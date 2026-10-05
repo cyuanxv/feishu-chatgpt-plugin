@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.6
+
+- Added tasklist discovery and tasklist-bound task pages, preserving empty pages with provider continuation
+- Added explicit-assignee search-to-detail reads, bounded to twenty detail checks and one at a time
+- Rechecked task IDs, assignee roles and completion filters; inaccessible or unverified hits remain partial without exposing mismatched task content
+- Bound task cursors to filters, identity, scopes and page size, with cycle/budget checks
+- Preserved all-day due values and unknown completion/membership instead of guessing
+- Expanded to 272 offline tests; no live identity, external write or public runtime is enabled
+
 ## 0.1.0-dev.5
 
 - Completed explicit nested comment-reply paging through document-bound signed cursors, root labeling and cycle/budget checks

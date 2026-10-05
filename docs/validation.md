@@ -1,8 +1,12 @@
 # Validation record
 
+## Sixth slice, task-read completion
+
+Version `0.1.0-dev.6` has **272 passing automated tests across thirteen files**, before independent review. Twenty-eight new tests cover official tasklist and task-search transports, empty nonterminal task pages, query-bound continuation, exact assignee roles, task-detail identity checks, inaccessible/unknown/filtered results, local detail fan-out limits, completion rechecks, explicit `my_tasks` coverage and missing-scope/session rejection. Provider task search's maximum page size is not claimed; twenty is this project's local detail-read budget.
+
 ## Fifth slice, document-read completion
 
-Version `0.1.0-dev.5` has **244 passing automated tests across twelve files**, before independent review. New official-SDK transport contracts cover Drive metadata and comment replies. Tests include file search-to-fetch, Wiki file resolution, partial metadata failures, unrequested/duplicate resource rejection, first-page-only root replies, independent document/reply cursors, empty nonterminal pages, scope/identity/query binding, cyclic pagination and malformed provider output. No real Feishu/ChatGPT/production database was used.
+Version `0.1.0-dev.5` has **244 passing automated tests across twelve files**. Independent review passed these and 53 selected additional checks against the immutable snapshot. New official-SDK transport contracts cover Drive metadata and comment replies. Tests include file search-to-fetch, Wiki file resolution, partial metadata failures, unrequested/duplicate resource rejection, first-page-only root replies, independent document/reply cursors, empty nonterminal pages, scope/identity/query binding, cyclic pagination and malformed provider output. No real Feishu/ChatGPT/production database was used.
 
 ## Fourth slice, person and room selection
 

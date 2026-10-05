@@ -31,6 +31,9 @@ export interface SdkReadBindings {
   searchRooms: Client['vc']['v1']['room']['search'];
   listTasks: Client['task']['v2']['task']['list'];
   getTask: Client['task']['v2']['task']['get'];
+  searchTasks: Client['task']['v2']['task']['search'];
+  listTasklists: Client['task']['v2']['tasklist']['list'];
+  listTasklistTasks: Client['task']['v2']['tasklist']['tasks'];
   lookupPeopleByEmail: Client['contact']['v3']['user']['batchGetId'];
   searchPeople: (payload: SearchPeopleInput, options?: Parameters<Client['authen']['v1']['userInfo']['get']>[1]) => Promise<SearchPeopleResponse>;
 }
@@ -61,6 +64,9 @@ export function bindSdkReads(client: Client): SdkReadBindings {
     searchRooms: client.vc.v1.room.search.bind(client.vc.v1.room),
     listTasks: client.task.v2.task.list.bind(client.task.v2.task),
     getTask: client.task.v2.task.get.bind(client.task.v2.task),
+    searchTasks: client.task.v2.task.search.bind(client.task.v2.task),
+    listTasklists: client.task.v2.tasklist.list.bind(client.task.v2.tasklist),
+    listTasklistTasks: client.task.v2.tasklist.tasks.bind(client.task.v2.tasklist),
     lookupPeopleByEmail: client.contact.v3.user.batchGetId.bind(client.contact.v3.user),
     // This new endpoint is present in the official CLI but not the installed generated Node resource tree.
     // Keep a fixed URL and payload contract rather than exposing arbitrary SDK requests.
@@ -73,6 +79,7 @@ export type SdkReadResponse<K extends SdkReadOperation> = Awaited<ReturnType<Sdk
 export type SdkReadData<K extends SdkReadOperation> = NonNullable<SdkReadResponse<K>['data']>;
 export const operationScopes: Record<SdkReadOperation, string> = {
   listCommentReplies: 'docs.read', batchMetadata: 'docs.read',
+  searchTasks: 'task.read', listTasklists: 'task.read', listTasklistTasks: 'task.read',
   profile: 'profile.read', searchDocs: 'docs.read', listChats: 'im.read', searchChats: 'im.read', searchMessages: 'im.read', getMessages: 'im.read', listMessages: 'im.read', getDocument: 'docs.read', readDocument: 'docs.read', getWikiNode: 'docs.read', listDocComments: 'docs.read', listBaseTables: 'base.read', listBaseFields: 'base.read', searchBaseRecords: 'base.read', listCalendars: 'calendar.read', listEvents: 'calendar.read', freeBusy: 'calendar.read', roomBusy: 'calendar.read', searchRooms: 'calendar.read', listTasks: 'task.read', getTask: 'task.read', lookupPeopleByEmail: 'people.read', searchPeople: 'people.read',
 };
 
