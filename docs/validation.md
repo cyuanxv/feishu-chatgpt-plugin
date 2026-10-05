@@ -1,8 +1,12 @@
 # Validation record
 
+## Ninth slice, finite provider routing seam
+
+Version `0.1.0-dev.9` has **369 passing automated tests across sixteen files**, before independent review. Thirty-nine new tests cover all seventeen routes, all thirteen write denials, actual SDK injected-transport calls, out-of-band context validation, audience/session/expiry checks, source/ref isolation, metadata-only logs, rate/output budgets, unsupported-filter rejection, Base ref/paging and capacity-only room metadata. The synthetic server retains its existing HTTP/MCP tests and live-mode refusal. A structurally valid supplied context is not proof of real authentication; production middleware and provider grant verification are absent.
+
 ## Eighth slice, read-flow orchestration
 
-Version `0.1.0-dev.8` has **330 passing automated tests across fifteen files**, before independent review. Twenty-seven new cases connect Base search/fetch, validate cross-calendar and empty-page continuation, preserve denied-calendar coverage, enforce per-call and total traversal budgets, reject query/identity/scope replay and harden thread pagination against loops/unknown/duplicate results. Existing negative unsupported-domain coverage now uses an actually unsupported domain because explicit Base search is implemented. Typecheck, build and source allowlist are part of the final slice checks.
+Version `0.1.0-dev.8` has **330 passing automated tests across fifteen files**. Independent review passed these and 56 selected additional checks against the immutable snapshot. Twenty-seven new cases connect Base search/fetch, validate cross-calendar and empty-page continuation, preserve denied-calendar coverage, enforce per-call and total traversal budgets, reject query/identity/scope replay and harden thread pagination against loops/unknown/duplicate results. Existing negative unsupported-domain coverage now uses an actually unsupported domain because explicit Base search is implemented. Typecheck, build and source allowlist are part of the final slice checks.
 
 ## Seventh slice, bounded Base read workflow
 

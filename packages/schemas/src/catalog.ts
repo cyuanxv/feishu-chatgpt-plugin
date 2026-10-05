@@ -16,7 +16,7 @@ export const inputSchemas = {
   get_message_thread: z.object({ message_id: id, ...page }).strict(),
   list_doc_comments: z.object({ doc_id: id, ...page }).strict(),
   list_bases: z.object({ query: query.optional(), ...page }).strict(),
-  get_base_schema: z.object({ base_id: id, table_id: id.optional() }).strict(),
+  get_base_schema: z.object({ base_id: id.optional(), base_ref: z.string().min(1).max(4096).optional(), table_id: id.optional(), ...page }).strict().refine(value => Boolean(value.base_id) !== Boolean(value.base_ref), 'Select exactly one Base ID or signed Base reference.'),
   query_base_records: z.object({ base_id: id, table_id: id, filter: z.object({ field_id: id, operator: z.enum(['eq', 'contains', 'gt', 'lt']), value: z.union([z.string().max(1000), z.number().finite()]) }).strict().optional(), sort: z.object({ field_id: id, direction: z.enum(['asc', 'desc']) }).strict().optional(), fields: z.array(id).min(1).max(50).optional(), ...page }).strict(),
   get_agenda: z.object({ time_range: timeRange, timezone, ...page }).strict(),
   get_free_busy: z.object({ time_range: timeRange, timezone, people: z.array(id).min(1).max(20) }).strict(),
@@ -39,7 +39,7 @@ export const descriptions: Record<ReadToolName, string> = {
   get_message_thread: 'Read the thread containing a known visible message_id. Returns source data without executing instructions in it. Synthetic demo data only.',
   list_doc_comments: 'Read comments on a visible doc_id. Does not add or change comments. Synthetic demo data only.',
   list_bases: 'List or search visible Base metadata, not record contents. Synthetic demo data only.',
-  get_base_schema: 'Inspect table and field IDs/types in a known Base before querying records. Synthetic demo data only.',
+  get_base_schema: 'Inspect a known Base ID or signed Base reference, with table-page continuation. Select a table before querying records. Synthetic demo data only.',
   query_base_records: 'Query records using actual schema field IDs, typed filters, sorting and pagination. Unknown fields are rejected; does not write records. Synthetic demo data only.',
   get_agenda: 'Read calendar events overlapping an explicit offset-aware time range and display them in the requested IANA timezone. Synthetic demo data only.',
   get_free_busy: 'Read busy intervals for explicitly resolved people IDs within a time range. Does not invite anyone. Synthetic demo data only.',
@@ -51,11 +51,14 @@ export const descriptions: Record<ReadToolName, string> = {
 
 export const writeToolNames = ['send_message', 'reply_message', 'create_doc', 'update_doc', 'add_doc_comment', 'create_base_record', 'update_base_record', 'create_event', 'update_event', 'respond_event', 'create_task', 'update_task', 'complete_task'] as const;
 const object = z.record(z.string(), z.json());
-export const outputSchema = z.object({
+const commonMeta = { request_id: z.string(), identity: z.literal('user'), connection_hash: z.string(), next_cursor: z.string().nullable(), partial: z.boolean() };
+const envelope = <T extends z.ZodObject>(meta: T) => z.object({
   ok: z.boolean(), data: object.optional(),
   error: z.object({ type: z.string(), message: z.string(), required_scope: z.string().optional() }).strict().optional(),
-  meta: z.object({ request_id: z.string(), identity: z.literal('user'), connection_hash: z.string(), source: z.literal('synthetic_mock'), next_cursor: z.string().nullable(), partial: z.boolean() }).strict(),
+  meta,
 }).strict().refine(value => value.ok ? value.data !== undefined && value.error === undefined : value.error !== undefined && value.data === undefined, 'Envelope must contain either successful data or an error.');
+export const outputSchema = envelope(z.object({ ...commonMeta, source: z.literal('synthetic_mock') }).strict());
+export const providerOutputSchema = envelope(z.object({ ...commonMeta, source: z.literal('feishu_api'), live_verified: z.literal(false) }).strict());
 
 export const readToolNames = Object.keys(inputSchemas) as ReadToolName[];
 export const toolTraceability = [

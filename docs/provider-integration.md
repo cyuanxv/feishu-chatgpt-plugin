@@ -4,7 +4,7 @@
 
 The provider slices compile against `@larksuiteoapi/node-sdk` 1.74.0. Contract tests instantiate this official SDK with a synthetic injected HTTP client and inspect the actual endpoint, method and payload it produces. They do not reimplement a fake SDK or contact a live service.
 
-The executable MCP endpoint still runs synthetic fixtures. No production OAuth router, authorized account or live backend is selected. `FEISHU_MODE=live` remains rejected. Provider modules return `source: feishu_api` where normalized, but these results are not mixed into the demo's `synthetic_mock` envelope.
+The executable MCP endpoint still runs synthetic fixtures. No production OAuth router, authorized account or live backend is selected. `FEISHU_MODE=live` remains rejected. Provider modules return `source: feishu_api` where normalized, but these results are not mixed into the demo's `synthetic_mock` envelope. The finite `ProviderReadRouter` is now an internally tested seam for all seventeen reads, never imported by the HTTP server; it always marks `live_verified: false`.
 
 ## Confirmed SDK bindings
 
@@ -41,7 +41,7 @@ All SDK calls force `withUserAccessToken`. No tenant/bot fallback is allowed. Th
 - Tasklist discovery is an internal provider helper, not an additional public MCP tool; production routing of the existing `list_tasks` filters remains unconfigured
 - Unified search supports DOCX/Wiki/message plus explicit file/Base metadata searches, ordered document-domain results, then messages, then Bases. The default domains remain DOCX/Wiki/message. Each continuation preserves query, connection and scope binding. File/Base fetch is metadata only
 - Not every PRD input filter is wired to every provider workflow. Unified search currently rejects unsupported owner/time/chat constraints rather than silently dropping them; Base discovery requires a keyword instead of claiming all-app enumeration. Production dispatch and complete input/output parity remain work to finish
-- Complete live MCP routing and domain-specific output schemas are not wired. Provider methods remain internal and never enter the synthetic MCP envelope
+- The internal provider router is implemented, but a live MCP server/authenticated middleware/real provider-grant gate are not wired. Domain-specific output schemas still need broader hardening. Provider data never enters the synthetic MCP envelope
 - Typed API responses are still untrusted. Domain output schema hardening and real empty/partial/error cases require further tests
 - Unknown Feishu business error codes fail safely without guessing a meaning or retrying. Exact endpoint-specific business-code classification remains to be verified
 
@@ -87,3 +87,11 @@ An explicit `base` domain in unified search uses this Base-only path. Signed `fe
 The internal `agenda` workflow traverses visible calendars in calendar/provider order. It does not claim global chronological sorting across pages. Each call reads at most one directory page of five calendars and checks at most five event pages. A traversal accepts at most twenty unique calendars; beyond that or the 4 KiB signed-reference limit it fails explicitly, not with a fabricated complete agenda. Gateway retries may multiply HTTP attempts. Date windows are explicitly timezone-qualified and limited to 31 days.
 
 Both directory and event continuations remain explicit, including empty nonterminal pages. Signed state binds the window, timezone, page size, scopes and connection. Known per-calendar 403/404 failures are retained across pages as unavailable calendar IDs; overall coverage remains partial after traversal ends. Authentication failures, malformed data and pagination cycles stop immediately. All-day date fields stay unchanged. Thread pages similarly reject missing pagination/arrays, duplicated messages, repeated provider tokens and a root missing its chat identity.
+
+## Inert tool-routing boundary
+
+`ProviderReadRouter` has exactly the existing seventeen read names, not raw SDK operation names. It uses the same public input schemas, scope map, rate limiter, audit builder and envelope constructor as the mock engine. It requires an out-of-band caller context, bound to the configured exact HTTPS resource and immutable subject/tenant/connection/domain, with finite future expiry. This validates a supplied context; **it does not authenticate bearer tokens**, establish Feishu consent or replace production authorization middleware.
+
+All thirteen planned writes and unknown operations are rejected without service execution. Caller identity/scopes/tokens cannot be supplied as tool arguments. Unsupported filters and provider budgets fail explicitly. All return values must claim provider provenance, valid continuation/completeness metadata and fit a 256 KiB serialized output budget. Exceptions and audit data are sanitized. The provider envelope is distinct from the mock envelope and always reports live verification false.
+
+The existing `get_base_schema` schema now accepts exactly one raw Base ID or signed Base reference, optional table ID and table-list pagination. The mock accepts only its own Base references; the provider route accepts only its own candidate type. Room metadata can apply capacity filters without querying busy times; unknown capacities stay excluded/partial and filter changes invalidate continuation. With a time window, room availability defaults to five checks unless an explicit supported page size is supplied.

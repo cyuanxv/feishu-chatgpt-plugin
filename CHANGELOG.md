@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-dev.9
+
+- Added an inert finite router for all seventeen provider reads, reusing shared input schemas, scope policy, rate limits, audit and envelope validation
+- Kept synthetic and provider provenance/ref types separate; provider output always carries live_verified=false
+- Added exact resource/session/expiry/context checks without claiming to authenticate bearer tokens or verify actual provider grants
+- Added Base signed-reference/table-page input and matching safe mock behavior, plus capacity-only room metadata paging
+- Rejected all thirteen writes, raw SDK operation names, unsupported filters, invalid budgets and model-supplied identity fields
+- Added a real-SDK injected-transport route test covering every read; expanded to 369 offline tests
+- No server import, production HTTP authentication, real credentials, deployment or live-mode change
+
 ## 0.1.0-dev.8
 
 - Connected explicit Base search results to signed metadata-only fetch and table-page continuation

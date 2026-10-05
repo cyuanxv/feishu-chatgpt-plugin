@@ -118,6 +118,17 @@ export class FeishuProviderDomains {
     const busy = raw.freebusy_list!.filter(item => Date.parse(item.start_time) < Date.parse(parsed.end) && Date.parse(item.end_time) > Date.parse(parsed.start)).map(item => ({ start: item.start_time, end: item.end_time }));
     return { room_id: roomId, available: busy.length === 0, known: true, busy, source: 'feishu_api' as const };
   }
+  async roomMetadata(identity: Identity, input: { query?: string; min_capacity?: number }, page: Page = {}) {
+    const parsed = z.object({ query: z.string().trim().min(1).max(1000).optional(), min_capacity: z.number().int().min(1).max(1000).optional() }).strict().parse(input);
+    const checkedPage = pageSchema.parse(page); const fingerprint = digest(JSON.stringify({ ...parsed, page_size: checkedPage.page_size }));
+    let inner: string | undefined;
+    if (checkedPage.cursor) { const cursor = this.handles.decode('cursor', identity, checkedPage.cursor); if (cursor.operation !== 'room_metadata' || cursor.fingerprint !== fingerprint || typeof cursor.inner !== 'string') throw new DomainError('INVALID_ARGUMENT', 'Room cursor does not match the requested filters.'); inner = cursor.inner; }
+    const result = await this.rooms(identity, parsed.query, { page_size: checkedPage.page_size, cursor: inner });
+    const unknown = result.rooms.filter(room => parsed.min_capacity !== undefined && room.capacity === null).length;
+    const next = result.next_cursor ? this.handles.encode('cursor', identity, { operation: 'room_metadata', fingerprint, inner: result.next_cursor }) : null;
+    if (next && next.length > 4096) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Room continuation exceeds the supported reference budget.');
+    return { rooms: result.rooms.filter(room => parsed.min_capacity === undefined || (room.capacity !== null && room.capacity >= parsed.min_capacity)).map(room => ({ ...room, available: null })), capacity_unknown_excluded: unknown, partial: unknown > 0, next_cursor: next, source: 'feishu_api' as const };
+  }
   async roomsWithAvailability(identity: Identity, input: { query?: string; min_capacity?: number; time_range: { start: string; end: string }; page_size?: number; cursor?: string }) {
     const parsed = z.object({ query: z.string().trim().min(1).max(1000).optional(), min_capacity: z.number().int().min(1).max(1000).optional(), time_range: timeRange, page_size: z.number().int().min(1).max(10).default(5), cursor: z.string().max(4096).optional() }).strict().parse(input);
     // Bind the outer filter/window to the provider room-list continuation.
