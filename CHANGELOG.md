@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-dev.7
+
+- Added bounded Base title candidates, explicit Base/table selection, Wiki-to-Base resolution and the schema-to-record read path
+- Restricted Base search to BITABLE at request and response boundaries without requiring unrelated logical document permission
+- Kept Wiki node tokens separate from Base app tokens and rechecked resolved targets across table-page continuation
+- Rejected unknown/duplicate/oversized field and record pages, malformed field IDs/types and inherited object properties
+- Expanded to 303 offline tests; public tool count and live-mode gate remain unchanged
+
 ## 0.1.0-dev.6
 
 - Added tasklist discovery and tasklist-bound task pages, preserving empty pages with provider continuation

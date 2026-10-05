@@ -5,6 +5,8 @@ import { silentSdkLogger } from './sdk-client.js';
 
 export interface SearchPeopleInput { data: { query: string }; params: { page_size: number } }
 export interface SearchPeopleResponse { code?: number; msg?: string; data?: { items: { id: string; display_info?: string; meta_data?: { i18n_names?: Record<string, string>; is_cross_tenant?: boolean } }[]; has_more: boolean; notice?: string } }
+export interface BaseSearchInput { data: { query: string; page_size: number; page_token?: string } }
+export interface BaseWikiResponse { code?: number; msg?: string; data?: { node?: { obj_type: 'bitable'; obj_token: string; title?: string } } }
 
 /** Every binding is a concrete read endpoint from the installed official SDK. Never expose this map as a generic MCP executor. */
 export interface SdkReadBindings {
@@ -36,6 +38,8 @@ export interface SdkReadBindings {
   listTasklistTasks: Client['task']['v2']['tasklist']['tasks'];
   lookupPeopleByEmail: Client['contact']['v3']['user']['batchGetId'];
   searchPeople: (payload: SearchPeopleInput, options?: Parameters<Client['authen']['v1']['userInfo']['get']>[1]) => Promise<SearchPeopleResponse>;
+  searchBases: (payload: BaseSearchInput, options?: Parameters<Client['search']['v2']['docWiki']['search']>[1]) => ReturnType<Client['search']['v2']['docWiki']['search']>;
+  resolveBaseWiki: (payload: { params: { token: string } }, options?: Parameters<Client['authen']['v1']['userInfo']['get']>[1]) => Promise<BaseWikiResponse>;
 }
 export function bindSdkReads(client: Client): SdkReadBindings {
   // SDK read methods can log raw Axios failures. Never allow those logs to expose credentials.
@@ -71,6 +75,20 @@ export function bindSdkReads(client: Client): SdkReadBindings {
     // This new endpoint is present in the official CLI but not the installed generated Node resource tree.
     // Keep a fixed URL and payload contract rather than exposing arbitrary SDK requests.
     searchPeople: (payload, options) => client.request<SearchPeopleResponse>({ method: 'POST', url: `${client.domain}/open-apis/contact/v3/users/search`, data: payload.data, params: payload.params }, options),
+    // Narrow Base-only operations do not require or expose DOCX read capability.
+    searchBases: async (payload, options) => {
+      const response = await client.search.v2.docWiki.search({ data: { query: payload.data.query, page_size: payload.data.page_size, ...(payload.data.page_token ? { page_token: payload.data.page_token } : {}), doc_filter: { doc_types: ['BITABLE'] }, wiki_filter: { doc_types: ['BITABLE'] } } }, options);
+      if (response.code === 0 && (!Array.isArray(response.data?.res_units) || response.data.res_units.some(item => item.result_meta?.doc_types !== 'BITABLE'))) throw new Error('Provider Base response crossed the requested resource domain.');
+      return response;
+    },
+    resolveBaseWiki: async (payload, options) => {
+      // Official CLI uses node_by_token. Do not infer a Base app token from a Wiki node token.
+      const response = await client.request<BaseWikiResponse>({ method: 'GET', url: `${client.domain}/open-apis/wiki/v2/spaces/node_by_token`, params: { token: payload.params.token } }, options);
+      if (response.code !== 0) return response;
+      const node = response.data?.node;
+      if (node?.obj_type !== 'bitable' || typeof node.obj_token !== 'string' || !node.obj_token) throw new Error('Wiki node did not resolve to a Base.');
+      return { code: 0, data: { node: { obj_type: 'bitable', obj_token: node.obj_token, ...(typeof node.title === 'string' ? { title: node.title } : {}) } } };
+    },
   };
 }
 export type SdkReadOperation = keyof SdkReadBindings;
@@ -80,6 +98,7 @@ export type SdkReadData<K extends SdkReadOperation> = NonNullable<SdkReadRespons
 export const operationScopes: Record<SdkReadOperation, string> = {
   listCommentReplies: 'docs.read', batchMetadata: 'docs.read',
   searchTasks: 'task.read', listTasklists: 'task.read', listTasklistTasks: 'task.read',
+  searchBases: 'base.read', resolveBaseWiki: 'base.read',
   profile: 'profile.read', searchDocs: 'docs.read', listChats: 'im.read', searchChats: 'im.read', searchMessages: 'im.read', getMessages: 'im.read', listMessages: 'im.read', getDocument: 'docs.read', readDocument: 'docs.read', getWikiNode: 'docs.read', listDocComments: 'docs.read', listBaseTables: 'base.read', listBaseFields: 'base.read', searchBaseRecords: 'base.read', listCalendars: 'calendar.read', listEvents: 'calendar.read', freeBusy: 'calendar.read', roomBusy: 'calendar.read', searchRooms: 'calendar.read', listTasks: 'task.read', getTask: 'task.read', lookupPeopleByEmail: 'people.read', searchPeople: 'people.read',
 };
 

@@ -33,7 +33,8 @@ export class FeishuProviderDomains {
     id.parse(baseId); id.parse(tableId); const fields: Field[] = []; let token: string | undefined; const seen = new Set<string>();
     for (let page = 0; page < 10; page++) {
       const response = await this.gateway.call('listBaseFields', { path: { app_token: baseId, table_id: tableId }, params: { page_size: 100, ...(token ? { page_token: token } : {}) } }, identity);
-      for (const field of response.items ?? []) { if (!field.field_id || !field.field_name || !Number.isFinite(field.type)) throw new DomainError('UPSTREAM_ERROR', 'Provider field schema was incomplete.'); fields.push({ field_id: field.field_id, field_name: field.field_name, type: field.type }); }
+      if (!Array.isArray(response.items) || response.items.length > 100 || typeof response.has_more !== 'boolean') throw new DomainError('UPSTREAM_ERROR', 'Provider field schema page was incomplete or oversized.');
+      for (const field of response.items) { if (!field || typeof field.field_id !== 'string' || !id.safeParse(field.field_id).success || typeof field.field_name !== 'string' || !field.field_name || !Number.isSafeInteger(field.type) || field.type <= 0) throw new DomainError('UPSTREAM_ERROR', 'Provider field schema was incomplete.'); fields.push({ field_id: field.field_id, field_name: field.field_name, type: field.type }); }
       if (!response.has_more) {
         if (new Set(fields.map(field => field.field_id)).size !== fields.length || new Set(fields.map(field => field.field_name)).size !== fields.length) throw new DomainError('CONFLICT', 'Provider schema contains ambiguous fields.');
         return { base_id: baseId, table_id: tableId, fields, schema_version: digest(JSON.stringify(fields)).slice(0, 16), source: 'feishu_api' };
@@ -59,10 +60,12 @@ export class FeishuProviderDomains {
     const pagination = this.page('base_records', { ...parsed, schema_version: schema.schema_version }, page, identity);
     const operators = { eq: 'is', contains: 'contains', gt: 'isGreater', lt: 'isLess' } as const;
     const raw = await this.gateway.call('searchBaseRecords', { path: { app_token: parsed.base_id, table_id: parsed.table_id }, params: { page_size: pagination.pageSize, user_id_type: 'open_id', ...(pagination.token ? { page_token: pagination.token } : {}) }, data: { field_names: selected.map(field => field.field_name), ...(filterField && parsed.filter ? { filter: { conjunction: 'and', conditions: [{ field_name: filterField.field_name, operator: operators[parsed.filter.operator], value: [String(parsed.filter.value)] }] } } : {}), ...(sortField && parsed.sort ? { sort: [{ field_name: sortField.field_name, desc: parsed.sort.direction === 'desc' }] } : {}) } }, identity);
-    const records = (raw.items ?? []).map(record => {
-      if (!record.record_id) throw new DomainError('UPSTREAM_ERROR', 'Provider record was missing an ID.');
-      return { record_id: record.record_id, fields: Object.fromEntries(selected.map(field => [field.field_id, { name: field.field_name, provider_type: field.type, value: record.fields[field.field_name] ?? null }])) };
+    if (!Array.isArray(raw.items) || raw.items.length > pagination.pageSize || typeof raw.has_more !== 'boolean') throw new DomainError('UPSTREAM_ERROR', 'Provider record page was incomplete or oversized.');
+    const records = raw.items.map(record => {
+      if (!record || typeof record.record_id !== 'string' || !id.safeParse(record.record_id).success || !record.fields || typeof record.fields !== 'object' || Array.isArray(record.fields)) throw new DomainError('UPSTREAM_ERROR', 'Provider record was missing an ID or fields.');
+      return { record_id: record.record_id, fields: Object.fromEntries(selected.map(field => [field.field_id, { name: field.field_name, provider_type: field.type, value: Object.hasOwn(record.fields, field.field_name) ? record.fields[field.field_name] ?? null : null }])) };
     });
+    if (new Set(records.map(record => record.record_id)).size !== records.length) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a record within one page.');
     return { records, schema_version: schema.schema_version, next_cursor: pagination.next(raw.has_more, raw.page_token), source: 'feishu_api' as const };
   }
   async calendars(identity: Identity, page: Page = {}) {

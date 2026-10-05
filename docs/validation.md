@@ -1,8 +1,12 @@
 # Validation record
 
+## Seventh slice, bounded Base read workflow
+
+Version `0.1.0-dev.7` has **303 passing automated tests across fourteen files**, before independent review. Thirty-one new cases cover keyword candidates, explicit Base/table selection, schema/record projection, Base-only permission isolation, fixed BITABLE request/response types, verified Wiki object resolution, retargeted Wiki cursors, Unicode and result budgets, empty-page continuation, malformed schemas/records and prototype-inherited property exclusion. No all-Base enumeration or actual provider permission grant is inferred from these tests.
+
 ## Sixth slice, task-read completion
 
-Version `0.1.0-dev.6` has **272 passing automated tests across thirteen files**, before independent review. Twenty-eight new tests cover official tasklist and task-search transports, empty nonterminal task pages, query-bound continuation, exact assignee roles, task-detail identity checks, inaccessible/unknown/filtered results, local detail fan-out limits, completion rechecks, explicit `my_tasks` coverage and missing-scope/session rejection. Provider task search's maximum page size is not claimed; twenty is this project's local detail-read budget.
+Version `0.1.0-dev.6` has **272 passing automated tests across thirteen files**. Independent review passed these and 56 selected additional checks against the immutable snapshot. Twenty-eight new tests cover official tasklist and task-search transports, empty nonterminal task pages, query-bound continuation, exact assignee roles, task-detail identity checks, inaccessible/unknown/filtered results, local detail fan-out limits, completion rechecks, explicit `my_tasks` coverage and missing-scope/session rejection. Provider task search's maximum page size is not claimed; twenty is this project's local detail-read budget.
 
 ## Fifth slice, document-read completion
 
