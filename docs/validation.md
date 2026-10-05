@@ -1,8 +1,12 @@
 # Validation record
 
+## Eighth slice, read-flow orchestration
+
+Version `0.1.0-dev.8` has **330 passing automated tests across fifteen files**, before independent review. Twenty-seven new cases connect Base search/fetch, validate cross-calendar and empty-page continuation, preserve denied-calendar coverage, enforce per-call and total traversal budgets, reject query/identity/scope replay and harden thread pagination against loops/unknown/duplicate results. Existing negative unsupported-domain coverage now uses an actually unsupported domain because explicit Base search is implemented. Typecheck, build and source allowlist are part of the final slice checks.
+
 ## Seventh slice, bounded Base read workflow
 
-Version `0.1.0-dev.7` has **303 passing automated tests across fourteen files**, before independent review. Thirty-one new cases cover keyword candidates, explicit Base/table selection, schema/record projection, Base-only permission isolation, fixed BITABLE request/response types, verified Wiki object resolution, retargeted Wiki cursors, Unicode and result budgets, empty-page continuation, malformed schemas/records and prototype-inherited property exclusion. No all-Base enumeration or actual provider permission grant is inferred from these tests.
+Version `0.1.0-dev.7` has **303 passing automated tests across fourteen files**. Independent review passed these and 57 selected additional checks against the immutable snapshot. Thirty-one new cases cover keyword candidates, explicit Base/table selection, schema/record projection, Base-only permission isolation, fixed BITABLE request/response types, verified Wiki object resolution, retargeted Wiki cursors, Unicode and result budgets, empty-page continuation, malformed schemas/records and prototype-inherited property exclusion. No all-Base enumeration or actual provider permission grant is inferred from these tests.
 
 ## Sixth slice, task-read completion
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.8
+
+- Connected explicit Base search results to signed metadata-only fetch and table-page continuation
+- Added explicit cross-calendar agenda traversal with window/scope-bound cursors, limited per-call work and persisted unavailable-calendar coverage
+- Preserved all-day dates and calendar/provider order instead of claiming global chronological sorting
+- Rejected thread cycles, missing/oversized pages, duplicate messages and unidentified root chats
+- Corrected Base title-search identity evidence: the project forces user tokens; the complete provider identity matrix is unverified
+- Expanded to 330 offline tests; no endpoint, background framework or live runtime was added
+
 ## 0.1.0-dev.7
 
 - Added bounded Base title candidates, explicit Base/table selection, Wiki-to-Base resolution and the schema-to-record read path

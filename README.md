@@ -2,7 +2,7 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.7`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.8`
 
 ## Current safety boundary
 
@@ -63,6 +63,8 @@ The product document says 29 tools but enumerates 30. All 30 are tracked in [the
 The provider slices add 30 bounded provider read bindings, targeted domain adapters, scoped document/message search-to-fetch (including Wiki DOCX resolution), message-thread reads and meeting-slot suggestions. This binding count is separate from the 17 public mock read tools; Base-only wrappers intentionally narrow existing APIs. File search/fetch returns metadata only, never downloads file contents. Comment previews expose signed reply-page cursors. People search returns ambiguous candidates without selecting a recipient; room selection combines known capacity with explicit-window availability. Task reads distinguish current-user, explicit tasklist and explicit-assignee coverage, retaining inaccessible/unknown results as partial. Base title search now leads to explicit Base/table selection and the reviewed schema/record mapper, with no claimed all-Base enumeration or Wiki-token guessing. Feishu token exchange/refresh primitives, encrypted one-time PKCE state and transactional account linking are also implemented. Contract tests run the actual installed SDK against an injected synthetic HTTP transport. Database integration tests execute real PostgreSQL SQL in memory through PGlite.
 
 These modules are **not wired into the demo MCP listener**. They have not contacted Feishu or exchanged real credentials. See [provider integration status](docs/provider-integration.md) for exact endpoint coverage and incomplete features.
+
+The current orchestration also connects explicit Base searches to metadata-only fetch, traverses visible calendars with explicit continuation, and rejects thread cursor loops or incomplete pages. Agenda ordering is per calendar/provider, not a claim of global chronological sorting. Missing calendar access stays visible as partial coverage.
 
 ## Next verified milestones
 

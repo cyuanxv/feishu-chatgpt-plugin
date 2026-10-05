@@ -20,7 +20,7 @@ export class FeishuProviderDomains {
     if (page.cursor) { const value = this.handles.decode('cursor', identity, page.cursor); if (value.operation !== operation || value.fingerprint !== fingerprint || value.pageSize !== page.page_size || typeof value.token !== 'string' || !Array.isArray(value.history) || value.history.length > 20 || value.history.some(item => typeof item !== 'string' || !/^[a-f0-9]{64}$/.test(item))) throw new DomainError('INVALID_ARGUMENT', 'Cursor does not match this provider query.'); token = value.token; history = value.history as string[]; }
     return { pageSize: page.page_size, token, next: (hasMore: boolean | undefined, nextToken: string | undefined) => {
       if (!hasMore) return null;
-      if (!nextToken) throw new DomainError('UPSTREAM_ERROR', 'Provider pagination was incomplete.');
+      if (typeof nextToken !== 'string' || !nextToken) throw new DomainError('UPSTREAM_ERROR', 'Provider pagination was incomplete.');
       const hash = digest(nextToken);
       if (history.includes(hash)) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a pagination token.');
       if (history.length >= 20) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Provider pagination exceeds the supported budget.');
@@ -71,13 +71,25 @@ export class FeishuProviderDomains {
   async calendars(identity: Identity, page: Page = {}) {
     const pagination = this.page('calendars', {}, page, identity);
     const raw = await this.gateway.call('listCalendars', { params: { page_size: pagination.pageSize, ...(pagination.token ? { page_token: pagination.token } : {}) } }, identity);
-    return { calendars: (raw.calendar_list ?? []).filter(calendar => !calendar.is_deleted).map(calendar => ({ calendar_id: calendar.calendar_id, summary: calendar.summary ?? '', type: calendar.type ?? 'unknown', role: calendar.role ?? 'unknown' })), next_cursor: pagination.next(raw.has_more, raw.page_token), source: 'feishu_api' as const };
+    if (!Array.isArray(raw.calendar_list) || raw.calendar_list.length > pagination.pageSize || typeof raw.has_more !== 'boolean') throw new DomainError('UPSTREAM_ERROR', 'Provider calendar page was incomplete or oversized.');
+    const calendars = raw.calendar_list.filter(calendar => !calendar.is_deleted).map(calendar => {
+      if (!id.safeParse(calendar.calendar_id).success) throw new DomainError('UPSTREAM_ERROR', 'Provider calendar ID was incomplete.');
+      return { calendar_id: calendar.calendar_id!, summary: calendar.summary ?? '', type: calendar.type ?? 'unknown', role: calendar.role ?? 'unknown' };
+    });
+    if (new Set(calendars.map(calendar => calendar.calendar_id)).size !== calendars.length) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a calendar within one page.');
+    return { calendars, next_cursor: pagination.next(raw.has_more, raw.page_token), source: 'feishu_api' as const };
   }
   async agenda(identity: Identity, input: { calendar_id: string; time_range: { start: string; end: string }; timezone: string }, page: Page = {}) {
     const parsed = z.object({ calendar_id: id, time_range: timeRange, timezone }).strict().parse(input);
     const pagination = this.page('agenda', parsed, page, identity);
     const raw = await this.gateway.call('listEvents', { path: { calendar_id: parsed.calendar_id }, params: { page_size: pagination.pageSize, start_time: String(Math.floor(Date.parse(parsed.time_range.start) / 1000)), end_time: String(Math.floor(Date.parse(parsed.time_range.end) / 1000)), user_id_type: 'open_id', ...(pagination.token ? { page_token: pagination.token } : {}) } }, identity);
-    return { events: (raw.items ?? []).map(event => ({ event_id: event.event_id, summary: event.summary ?? '', start: event.start_time, end: event.end_time, status: event.status ?? null })), timezone: parsed.timezone, time_encoding: 'provider_timestamp_or_all_day_date' as const, next_cursor: pagination.next(raw.has_more, raw.page_token), source: 'feishu_api' as const };
+    if (!Array.isArray(raw.items) || raw.items.length > pagination.pageSize || typeof raw.has_more !== 'boolean') throw new DomainError('UPSTREAM_ERROR', 'Provider event page was incomplete or oversized.');
+    const events = raw.items.map(event => {
+      if (!id.safeParse(event.event_id).success) throw new DomainError('UPSTREAM_ERROR', 'Provider event ID was incomplete.');
+      return { event_id: event.event_id!, summary: event.summary ?? '', start: event.start_time, end: event.end_time, status: event.status ?? null };
+    });
+    if (new Set(events.map(event => event.event_id)).size !== events.length) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated an event within one page.');
+    return { events, timezone: parsed.timezone, time_encoding: 'provider_timestamp_or_all_day_date' as const, next_cursor: pagination.next(raw.has_more, raw.page_token), source: 'feishu_api' as const };
   }
   async freeBusy(identity: Identity, input: { people: string[]; time_range: { start: string; end: string }; timezone: string }) {
     const parsed = z.object({ people: z.array(id).min(1).max(20), time_range: timeRange, timezone }).strict().parse(input);

@@ -3,11 +3,13 @@ import { digest, DomainError, Handles, requireScope, type Identity } from '../..
 import { FeishuProviderReads } from './provider-reads.js';
 import { FeishuProviderDomains } from './provider-domains.js';
 import { FeishuSdkReadGateway } from './sdk-reads.js';
+import { FeishuProviderBases } from './provider-bases.js';
+import { FeishuProviderAgenda } from './provider-agenda.js';
 
 const id = z.string().min(1).max(256).regex(/^[A-Za-z0-9_-]+$/);
-const searchInput = z.object({ query: z.string().trim().min(1).refine(value => Array.from(value).length <= 30, 'Unified search supports at most 30 Unicode characters.'), types: z.array(z.enum(['doc', 'wiki', 'message', 'file'])).min(1).max(4).default(['doc', 'wiki', 'message']), page_size: z.number().int().min(1).max(20).default(20), cursor: z.string().min(1).max(4096).optional() }).strict();
+const searchInput = z.object({ query: z.string().trim().min(1).refine(value => Array.from(value).length <= 30, 'Unified search supports at most 30 Unicode characters.'), types: z.array(z.enum(['doc', 'wiki', 'message', 'file', 'base'])).min(1).max(5).default(['doc', 'wiki', 'message']), page_size: z.number().int().min(1).max(20).default(20), cursor: z.string().min(1).max(4096).optional() }).strict();
 type SearchInput = z.input<typeof searchInput>;
-interface SearchHit { result_id: string; type: 'doc' | 'wiki' | 'message' | 'file'; title: string; snippet: string; url: string | null }
+interface SearchHit { result_id: string; type: 'doc' | 'wiki' | 'message' | 'file' | 'base'; title: string; snippet: string; url: string | null }
 const commentCursorSchema = z.object({ operation: z.enum(['comments', 'comment_replies']), documentId: id, commentId: id.optional(), pageSize: z.number().int().min(1).max(50), upstream: z.string().min(1).nullable(), history: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(20) });
 type CommentCursor = z.infer<typeof commentCursorSchema>;
 const replySchema = z.object({ reply_id: id, user_id: z.string().optional(), content: z.object({ elements: z.array(z.discriminatedUnion('type', [z.object({ type: z.literal('text_run'), text_run: z.object({ text: z.string() }) }), z.object({ type: z.literal('docs_link'), docs_link: z.object({ url: z.string() }) }), z.object({ type: z.literal('person'), person: z.object({ user_id: z.string() }) })])) }) });
@@ -15,12 +17,16 @@ const replySchema = z.object({ reply_id: id, user_id: z.string().optional(), con
 /** Specific read workflows over the reviewed provider adapters; still not exposed through a live HTTP listener. */
 export class FeishuProviderWorkflows {
   constructor(private readonly reads: FeishuProviderReads, private readonly domains: FeishuProviderDomains, private readonly gateway: FeishuSdkReadGateway, private readonly handles: Handles) {}
+  async agenda(identity: Identity, input: { time_range: { start: string; end: string }; timezone: string; page_size?: number; cursor?: string }) {
+    return new FeishuProviderAgenda(this.domains, this.handles).list(identity, input);
+  }
   async search(identity: Identity, input: SearchInput) {
     requireScope(identity, 'search.read');
     const parsed = searchInput.parse(input); const types = [...new Set(parsed.types)];
-    const missing = [...new Set(types.filter(type => !identity.scopes.includes(type === 'message' ? 'im.read' : 'docs.read')).map(type => type === 'message' ? 'im.read' : 'docs.read'))];
-    const allowed = types.filter(type => identity.scopes.includes(type === 'message' ? 'im.read' : 'docs.read'));
-    const domains = [...(allowed.some(type => type !== 'message') ? ['docs'] : []), ...(allowed.includes('message') ? ['messages'] : [])];
+    const scope = (type: typeof types[number]) => type === 'message' ? 'im.read' : type === 'base' ? 'base.read' : 'docs.read';
+    const missing = [...new Set(types.filter(type => !identity.scopes.includes(scope(type))).map(scope))];
+    const allowed = types.filter(type => identity.scopes.includes(scope(type)));
+    const domains = [...(allowed.some(type => !['message', 'base'].includes(type)) ? ['docs'] : []), ...(allowed.includes('message') ? ['messages'] : []), ...(allowed.includes('base') ? ['bases'] : [])];
     if (!domains.length) throw new DomainError('INSUFFICIENT_SCOPE', 'No requested search domain is authorized.', missing[0]);
     const query = { query: parsed.query, types, page_size: parsed.page_size, domains, scopes: [...identity.scopes].sort() };
     const fingerprint = digest(JSON.stringify(query));
@@ -43,9 +49,13 @@ export class FeishuProviderWorkflows {
           return [{ result_id: this.handles.encode('resource', identity, { provider: 'feishu', kind: type, id: result.resource_token, ...(type === 'file' ? { wiki: result.container_type === 'WIKI' } : {}) }), type, title: result.title, snippet: result.snippet, url: result.url }];
         });
         upstream = page.next_cursor ?? undefined;
-      } else {
+      } else if (domains[index] === 'messages') {
         const page = await this.reads.searchMessages(identity, { query: parsed.query }, { page_size: parsed.page_size, cursor: upstream });
         results = page.messages.map(result => ({ result_id: this.handles.encode('resource', identity, { provider: 'feishu', kind: 'message', id: result.message_id }), type: 'message', title: result.snippet.slice(0, 80), snippet: result.snippet, url: null }));
+        upstream = page.next_cursor ?? undefined;
+      } else {
+        const page = await new FeishuProviderBases(this.gateway, this.domains, this.handles).search(identity, parsed.query, { page_size: parsed.page_size, cursor: upstream });
+        results = page.candidates.map(candidate => ({ result_id: this.handles.encode('resource', identity, { provider: 'feishu', kind: 'base', candidate: candidate.base_ref }), type: 'base', title: candidate.title, snippet: 'Base metadata; select a table before reading records.', url: candidate.url }));
         upstream = page.next_cursor ?? undefined;
       }
       if (!upstream) index++;
@@ -56,13 +66,24 @@ export class FeishuProviderWorkflows {
       }
       if (results.length || upstream || index >= domains.length) break;
     }
-    return { results, next_cursor: nextCursor, partial: missing.length > 0, missing_scopes: missing, ordering: 'documents_then_messages' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    return { results, next_cursor: nextCursor, partial: missing.length > 0, missing_scopes: missing, ordering: 'documents_then_messages_then_bases' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   async fetch(identity: Identity, input: { result_id: string; max_chars?: number; cursor?: string }) {
     requireScope(identity, 'search.read');
     const parsed = z.object({ result_id: z.string().min(1).max(4096), max_chars: z.number().int().min(20).max(20_000).default(8000), cursor: z.string().max(4096).optional() }).strict().parse(input);
     const reference = this.handles.decode('resource', identity, parsed.result_id);
-    if (reference.provider !== 'feishu' || !['doc', 'wiki', 'message', 'file'].includes(String(reference.kind))) throw new DomainError('INVALID_ARGUMENT', 'Unknown provider resource reference.');
+    if (reference.provider !== 'feishu' || !['doc', 'wiki', 'message', 'file', 'base'].includes(String(reference.kind))) throw new DomainError('INVALID_ARGUMENT', 'Unknown provider resource reference.');
+    if (reference.kind === 'base') {
+      requireScope(identity, 'base.read');
+      const candidate = z.string().min(1).max(4096).parse(reference.candidate);
+      let upstream: string | undefined;
+      if (parsed.cursor) { const cursor = this.handles.decode('cursor', identity, parsed.cursor); if (cursor.operation !== 'base_metadata_fetch' || cursor.resultId !== parsed.result_id || typeof cursor.upstream !== 'string') throw new DomainError('INVALID_ARGUMENT', 'Base fetch cursor does not match the result.'); upstream = cursor.upstream; }
+      const result = await new FeishuProviderBases(this.gateway, this.domains, this.handles).inspect(identity, { base_ref: candidate }, { cursor: upstream });
+      if (!('tables' in result)) throw new DomainError('UPSTREAM_ERROR', 'Base metadata response did not contain table candidates.');
+      const next = result.next_cursor ? this.handles.encode('cursor', identity, { operation: 'base_metadata_fetch', resultId: parsed.result_id, upstream: result.next_cursor }) : null;
+      if (next && next.length > 4096) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Base metadata continuation exceeds the supported reference budget.');
+      return { type: 'base' as const, content: null, metadata: { base_id: result.base_id, tables: result.tables }, coverage: 'base_and_table_metadata' as const, selection_required: true, truncated: next !== null, next_cursor: next, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    }
     const resourceId = id.parse(reference.id);
     if (reference.kind === 'file') {
       requireScope(identity, 'docs.read');
@@ -158,16 +179,26 @@ export class FeishuProviderWorkflows {
       return { messages: [this.messageSummary(root)], next_cursor: null, thread_id: null, coverage: 'standalone_message' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
     }
     id.parse(root.thread_id);
-    let upstream: string | undefined;
-    if (page.cursor) { const cursor = this.handles.decode('cursor', identity, page.cursor); if (cursor.operation !== 'message_thread' || cursor.messageId !== messageId || cursor.threadId !== root.thread_id || cursor.pageSize !== page.page_size || typeof cursor.upstream !== 'string') throw new DomainError('INVALID_ARGUMENT', 'Thread cursor belongs to another message.'); upstream = cursor.upstream; }
+    if (!root.chat_id) throw new DomainError('UPSTREAM_ERROR', 'Provider thread root did not identify its chat.');
+    let upstream: string | undefined; let history: string[] = [];
+    if (page.cursor) { const cursor = this.handles.decode('cursor', identity, page.cursor); if (cursor.operation !== 'message_thread' || cursor.messageId !== messageId || cursor.threadId !== root.thread_id || cursor.pageSize !== page.page_size || typeof cursor.upstream !== 'string' || !Array.isArray(cursor.history) || cursor.history.length > 20 || cursor.history.some(value => typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value))) throw new DomainError('INVALID_ARGUMENT', 'Thread cursor belongs to another message.'); upstream = cursor.upstream; history = cursor.history as string[]; }
     // Official CLI reference confirms this concrete read endpoint and container_id_type=thread.
     const response = await this.gateway.call('listMessages', { params: { container_id_type: 'thread', container_id: root.thread_id, sort_type: 'ByCreateTimeAsc', page_size: page.page_size, ...(upstream ? { page_token: upstream } : {}) } }, identity);
-    if (response.has_more && !response.page_token) throw new DomainError('UPSTREAM_ERROR', 'Thread pagination was incomplete.');
-    const messages = (response.items ?? []).filter(message => !message.deleted).map(message => {
+    if (!Array.isArray(response.items) || response.items.length > page.page_size || typeof response.has_more !== 'boolean' || (response.has_more && (typeof response.page_token !== 'string' || !response.page_token))) throw new DomainError('UPSTREAM_ERROR', 'Thread pagination was incomplete or oversized.');
+    let next: string | null = null;
+    if (response.has_more) {
+      const hash = digest(response.page_token!);
+      if (history.includes(hash)) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a thread pagination token.');
+      if (history.length >= 20) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Thread pagination exceeds the supported budget.');
+      next = this.handles.encode('cursor', identity, { operation: 'message_thread', messageId, threadId: root.thread_id, pageSize: page.page_size, upstream: response.page_token, history: [...history, hash] });
+      if (next.length > 4096) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Thread cursor exceeds the supported reference size.');
+    }
+    const messages = response.items.filter(message => !message.deleted).map(message => {
       if (!message.message_id || message.thread_id !== root.thread_id || (root.chat_id && message.chat_id !== root.chat_id)) throw new DomainError('UPSTREAM_ERROR', 'Provider returned a message outside the requested thread.');
       return this.messageSummary(message);
     });
-    return { messages, thread_id: root.thread_id, next_cursor: response.has_more ? this.handles.encode('cursor', identity, { operation: 'message_thread', messageId, threadId: root.thread_id, pageSize: page.page_size, upstream: response.page_token }) : null, coverage: 'thread_messages' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    if (new Set(messages.map(message => message.message_id)).size !== messages.length) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a message within one thread page.');
+    return { messages, thread_id: root.thread_id, next_cursor: next, coverage: 'thread_messages' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   private messageSummary(message: { message_id?: string; chat_id?: string; thread_id?: string; msg_type?: string; body?: { content: string }; sender?: { id: string }; create_time?: string }) {
     if (!message.body || typeof message.body.content !== 'string') throw new DomainError('UPSTREAM_ERROR', 'Provider did not return the message body.');
