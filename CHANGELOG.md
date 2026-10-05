@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-dev.5
+
+- Completed explicit nested comment-reply paging through document-bound signed cursors, root labeling and cycle/budget checks
+- Added file search-to-metadata-fetch with scoped signed references; no binary download or fabricated file text
+- Preserved batch metadata failures and unknown responses, rejected unrequested/duplicate/mismatched resources and limited output projection
+- Rejected mismatched DOCX metadata IDs and malformed comment/reply pages
+- Expanded to 244 offline tests; live MCP routing and production configuration remain closed
+
 ## 0.1.0-dev.4
 
 - Added fixed-endpoint, user-only name/email search from the official CLI contract, with ambiguous-candidate and query-refinement semantics

@@ -1,10 +1,14 @@
 # Validation record
 
+## Fifth slice, document-read completion
+
+Version `0.1.0-dev.5` has **244 passing automated tests across twelve files**, before independent review. New official-SDK transport contracts cover Drive metadata and comment replies. Tests include file search-to-fetch, Wiki file resolution, partial metadata failures, unrequested/duplicate resource rejection, first-page-only root replies, independent document/reply cursors, empty nonterminal pages, scope/identity/query binding, cyclic pagination and malformed provider output. No real Feishu/ChatGPT/production database was used.
+
 ## Fourth slice, person and room selection
 
 Version `0.1.0-dev.4` has **214 passing automated tests across eleven files** after review corrections, before independent re-verification. Typecheck, build and source allowlist checks pass. The actual-user configuration remains absent. The new tests cover fixed-path user identity in people search, duplicate names and incomplete matches, provider query/page bounds, room-only busy requests, capacity filtering, missing/malformed/denied room availability, query-bound room continuation and the distinction between internal scopes, verified provider documentation and actual granted scopes.
 
-Room capacities must be positive safe integers, without string coercion. All room/person busy intervals require valid RFC3339 timestamps with an explicit UTC offset or `Z`; timezone-less and invalid calendar dates remain unknown. Missing or oversized provider room pages fail before any per-room requests, enforcing the local ten-request availability budget even when the provider ignores page size. The reviewer's twelve boundary cases and eleven additional malformed-data/budget checks are permanent regressions.
+Room capacities must be positive safe integers, without string coercion. All room/person busy intervals require valid RFC3339 timestamps with an explicit UTC offset or `Z`; timezone-less and invalid calendar dates remain unknown. Missing or oversized provider room pages fail before any per-room requests, enforcing at most ten room checks per page even when the provider ignores page size. Each room check can make up to three HTTP attempts under the gateway retry policy. The reviewer's twelve boundary cases and eleven additional malformed-data/budget checks are permanent regressions. Independent dev.4 R2 review passed 214 formal tests and 52 additional selected checks against the immutable snapshot.
 
 ## Third slice, minimal high-level reads
 

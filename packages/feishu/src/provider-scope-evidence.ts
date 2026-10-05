@@ -2,6 +2,8 @@ import { DomainError } from '../../policy/src/core.js';
 
 /** Verified minimum provider permissions. These are documentation/configuration evidence, not user grants. */
 export const providerScopeEvidence = {
+  batchMetadata: { minimum: ['drive:drive.metadata:readonly'], identity: 'user-or-tenant', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/drive.json' },
+  listCommentReplies: { minimum: ['docs:document.comment:read'], identity: 'user-or-tenant', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/drive.json' },
   searchPeople: { minimum: ['contact:user:search'], identity: 'user', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/contact/contact_search_user.go' },
   searchDocs: { minimum: ['search:docs:read'], identity: 'user-or-tenant', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/drive/drive_search.go' },
   roomBusy: { minimum: ['calendar:calendar.free_busy:read'], identity: 'user-or-tenant', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/internal/registry/catalog/services/calendar.json' },

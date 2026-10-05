@@ -79,8 +79,33 @@ export class FeishuProviderReads {
   async document(identity: Identity, documentId: string) {
     id.parse(documentId);
     const [metadata, content] = await Promise.all([this.gateway.call('getDocument', { path: { document_id: documentId } }, identity), this.gateway.call('readDocument', { path: { document_id: documentId } }, identity)]);
-    if (!metadata.document?.document_id || typeof content.content !== 'string') throw new DomainError('UPSTREAM_ERROR', 'Provider document response was incomplete.');
+    if (metadata.document?.document_id !== documentId || typeof content.content !== 'string') throw new DomainError('UPSTREAM_ERROR', 'Provider document response was incomplete or mismatched.');
     return { doc_id: metadata.document.document_id, title: metadata.document.title ?? '', content: content.content, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+  }
+  /** A bounded metadata read, never a download. Keep each failed/missing request visible. */
+  async metadata(identity: Identity, requests: { doc_token: string; doc_type: 'file' | 'docx' }[]) {
+    const requestSchema = z.object({ doc_token: id, doc_type: z.enum(['file', 'docx']) }).strict();
+    const parsed = z.array(requestSchema).min(1).max(200).parse(requests);
+    if (new Set(parsed.map(item => item.doc_token)).size !== parsed.length) throw new DomainError('INVALID_ARGUMENT', 'Metadata requests must have unique resource tokens.');
+    const raw = await this.gateway.call('batchMetadata', { data: { request_docs: parsed, with_url: true }, params: { user_id_type: 'open_id' } }, identity);
+    const response = z.object({ metas: z.array(z.object({ doc_token: id, doc_type: z.enum(['file', 'docx']), title: z.string(), owner_id: z.string().optional(), create_time: z.string().optional(), latest_modify_time: z.string().optional(), url: z.string().optional(), request_doc_info: requestSchema.optional() })), failed_list: z.array(z.object({ token: id, code: z.number().int() })).optional() }).safeParse(raw);
+    if (!response.success) throw new DomainError('UPSTREAM_ERROR', 'Provider metadata response was malformed.');
+    const requested = new Map(parsed.map(item => [item.doc_token, item.doc_type]));
+    const seen = new Set<string>();
+    for (const meta of response.data.metas) {
+      if (requested.get(meta.doc_token) !== meta.doc_type || (meta.request_doc_info && (meta.request_doc_info.doc_token !== meta.doc_token || meta.request_doc_info.doc_type !== meta.doc_type)) || seen.has(meta.doc_token)) throw new DomainError('UPSTREAM_ERROR', 'Provider metadata did not match unique requested resources.');
+      seen.add(meta.doc_token);
+    }
+    for (const failure of response.data.failed_list ?? []) {
+      if (!requested.has(failure.token) || seen.has(failure.token)) throw new DomainError('UPSTREAM_ERROR', 'Provider metadata failures did not match unique requested resources.');
+      seen.add(failure.token);
+    }
+    const items = parsed.map(request => {
+      const meta = response.data.metas.find(item => item.doc_token === request.doc_token);
+      const failure = response.data.failed_list?.find(item => item.token === request.doc_token);
+      return { ...request, status: meta ? 'ok' as const : failure ? 'failed' as const : 'unknown' as const, metadata: meta ? { title: meta.title, owner_open_id: meta.owner_id ?? null, created_at_provider: meta.create_time ?? null, updated_at_provider: meta.latest_modify_time ?? null, url: safeUrl(meta.url) } : null, provider_code: failure?.code ?? null };
+    });
+    return { items, partial: items.some(item => item.status !== 'ok'), coverage: 'metadata_only' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   async tasks(identity: Identity, completed: boolean | undefined, page: Page = {}) {
     const params = this.token('tasks', { completed }, page, identity);

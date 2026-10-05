@@ -5,9 +5,12 @@ import { FeishuProviderDomains } from './provider-domains.js';
 import { FeishuSdkReadGateway } from './sdk-reads.js';
 
 const id = z.string().min(1).max(256).regex(/^[A-Za-z0-9_-]+$/);
-const searchInput = z.object({ query: z.string().trim().min(1).refine(value => Array.from(value).length <= 30, 'Unified search supports at most 30 Unicode characters.'), types: z.array(z.enum(['doc', 'wiki', 'message'])).min(1).max(3).default(['doc', 'wiki', 'message']), page_size: z.number().int().min(1).max(20).default(20), cursor: z.string().min(1).max(4096).optional() }).strict();
+const searchInput = z.object({ query: z.string().trim().min(1).refine(value => Array.from(value).length <= 30, 'Unified search supports at most 30 Unicode characters.'), types: z.array(z.enum(['doc', 'wiki', 'message', 'file'])).min(1).max(4).default(['doc', 'wiki', 'message']), page_size: z.number().int().min(1).max(20).default(20), cursor: z.string().min(1).max(4096).optional() }).strict();
 type SearchInput = z.input<typeof searchInput>;
-interface SearchHit { result_id: string; type: 'doc' | 'wiki' | 'message'; title: string; snippet: string; url: string | null }
+interface SearchHit { result_id: string; type: 'doc' | 'wiki' | 'message' | 'file'; title: string; snippet: string; url: string | null }
+const commentCursorSchema = z.object({ operation: z.enum(['comments', 'comment_replies']), documentId: id, commentId: id.optional(), pageSize: z.number().int().min(1).max(50), upstream: z.string().min(1).nullable(), history: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(20) });
+type CommentCursor = z.infer<typeof commentCursorSchema>;
+const replySchema = z.object({ reply_id: id, user_id: z.string().optional(), content: z.object({ elements: z.array(z.discriminatedUnion('type', [z.object({ type: z.literal('text_run'), text_run: z.object({ text: z.string() }) }), z.object({ type: z.literal('docs_link'), docs_link: z.object({ url: z.string() }) }), z.object({ type: z.literal('person'), person: z.object({ user_id: z.string() }) })])) }) });
 
 /** Specific read workflows over the reviewed provider adapters; still not exposed through a live HTTP listener. */
 export class FeishuProviderWorkflows {
@@ -32,11 +35,12 @@ export class FeishuProviderWorkflows {
     // At most one page from each authorized domain in a call. Every continuation is explicit.
     while (index < domains.length) {
       if (domains[index] === 'docs') {
-        const page = await this.reads.searchDocuments(identity, parsed.query, ['DOCX', 'WIKI'], { page_size: parsed.page_size, cursor: upstream });
+        const providerTypes: ('DOCX' | 'WIKI' | 'FILE')[] = [...(allowed.some(type => type === 'doc' || type === 'wiki') ? ['DOCX', 'WIKI'] as const : []), ...(allowed.includes('file') ? ['FILE'] as const : [])];
+        const page = await this.reads.searchDocuments(identity, parsed.query, providerTypes, { page_size: parsed.page_size, cursor: upstream });
         results = page.results.flatMap(result => {
-          const type = result.resource_type === 'WIKI' || result.container_type === 'WIKI' ? 'wiki' as const : 'doc' as const;
+          const type = result.resource_type === 'FILE' ? 'file' as const : result.resource_type === 'WIKI' || result.container_type === 'WIKI' ? 'wiki' as const : 'doc' as const;
           if (!allowed.includes(type)) return [];
-          return [{ result_id: this.handles.encode('resource', identity, { provider: 'feishu', kind: type, id: result.resource_token }), type, title: result.title, snippet: result.snippet, url: result.url }];
+          return [{ result_id: this.handles.encode('resource', identity, { provider: 'feishu', kind: type, id: result.resource_token, ...(type === 'file' ? { wiki: result.container_type === 'WIKI' } : {}) }), type, title: result.title, snippet: result.snippet, url: result.url }];
         });
         upstream = page.next_cursor ?? undefined;
       } else {
@@ -58,8 +62,21 @@ export class FeishuProviderWorkflows {
     requireScope(identity, 'search.read');
     const parsed = z.object({ result_id: z.string().min(1).max(4096), max_chars: z.number().int().min(20).max(20_000).default(8000), cursor: z.string().max(4096).optional() }).strict().parse(input);
     const reference = this.handles.decode('resource', identity, parsed.result_id);
-    if (reference.provider !== 'feishu' || !['doc', 'wiki', 'message'].includes(String(reference.kind))) throw new DomainError('INVALID_ARGUMENT', 'Unknown provider resource reference.');
+    if (reference.provider !== 'feishu' || !['doc', 'wiki', 'message', 'file'].includes(String(reference.kind))) throw new DomainError('INVALID_ARGUMENT', 'Unknown provider resource reference.');
     const resourceId = id.parse(reference.id);
+    if (reference.kind === 'file') {
+      requireScope(identity, 'docs.read');
+      if (parsed.cursor) throw new DomainError('INVALID_ARGUMENT', 'File metadata does not have a content continuation.');
+      let fileId = resourceId;
+      if (reference.wiki === true) {
+        const node = await this.gateway.call('getWikiNode', { params: { token: resourceId, obj_type: 'wiki' } }, identity);
+        if (node.node?.obj_type !== 'file' || !node.node.obj_token) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Wiki search result did not resolve to file metadata.');
+        fileId = id.parse(node.node.obj_token);
+      }
+      const result = await this.reads.metadata(identity, [{ doc_token: fileId, doc_type: 'file' }]);
+      const item = result.items[0]!;
+      return { title: item.metadata?.title ?? null, type: 'file' as const, content: null, metadata: item.metadata, status: item.status, provider_code: item.provider_code, partial: result.partial, coverage: 'metadata_only' as const, truncated: false, next_cursor: null, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    }
     let title: string; let content: string;
     if (reference.kind === 'message') {
       requireScope(identity, 'im.read');
@@ -85,17 +102,50 @@ export class FeishuProviderWorkflows {
     return { title, type: reference.kind, content: page.items.join(''), truncated: page.next_cursor !== null, next_cursor: page.next_cursor, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   async comments(identity: Identity, documentId: string, input: { page_size?: number; cursor?: string } = {}) {
-    id.parse(documentId);
+    id.parse(documentId); requireScope(identity, 'docs.read');
     const page = z.object({ page_size: z.number().int().min(1).max(50).default(20), cursor: z.string().max(4096).optional() }).strict().parse(input);
-    let upstream: string | undefined;
-    if (page.cursor) { const reference = this.handles.decode('cursor', identity, page.cursor); if (reference.operation !== 'comments' || reference.documentId !== documentId || reference.pageSize !== page.page_size || typeof reference.upstream !== 'string') throw new DomainError('INVALID_ARGUMENT', 'Comment cursor belongs to another query.'); upstream = reference.upstream; }
+    let context: CommentCursor = { operation: 'comments', documentId, pageSize: page.page_size, upstream: null, history: [] };
+    if (page.cursor) {
+      const decoded = commentCursorSchema.safeParse(this.handles.decode('cursor', identity, page.cursor));
+      if (!decoded.success || decoded.data.documentId !== documentId || decoded.data.pageSize !== page.page_size || (decoded.data.operation === 'comment_replies' && !decoded.data.commentId)) throw new DomainError('INVALID_ARGUMENT', 'Comment cursor belongs to another query.');
+      context = decoded.data;
+    }
+    const upstream = context.upstream ?? undefined;
+    if (context.operation === 'comment_replies') {
+      const raw = await this.gateway.call('listCommentReplies', { path: { file_token: documentId, comment_id: context.commentId! }, params: { file_type: 'docx', user_id_type: 'open_id', page_size: page.page_size, ...(upstream ? { page_token: upstream } : {}) } }, identity);
+      if (!Array.isArray(raw.items) || raw.items.length > page.page_size) throw new DomainError('UPSTREAM_ERROR', 'Provider reply page was missing or oversized.');
+      const next = this.nextCommentCursor(identity, context, raw.has_more, raw.page_token);
+      const replies = raw.items.map((reply, index) => ({ ...this.commentReply(reply), is_root: !upstream && index === 0 }));
+      if (new Set(replies.map(reply => reply.reply_id)).size !== replies.length) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a reply within one page.');
+      return { comments: [{ comment_id: context.commentId!, replies, replies_complete: !upstream && next === null, reply_cursor: next }], partial: Boolean(upstream) || next !== null, reply_sequence_complete: next === null, next_cursor: next, coverage: 'comment_replies_page' as const, replaces_preview: !upstream, merge_by: 'reply_id' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    }
     const raw = await this.gateway.call('listDocComments', { path: { file_token: documentId }, params: { file_type: 'docx', page_size: page.page_size, user_id_type: 'open_id', ...(upstream ? { page_token: upstream } : {}) } }, identity);
-    if (raw.has_more && !raw.page_token) throw new DomainError('UPSTREAM_ERROR', 'Comment pagination was incomplete.');
-    const comments = (raw.items ?? []).map(comment => {
+    if (!Array.isArray(raw.items) || raw.items.length > page.page_size) throw new DomainError('UPSTREAM_ERROR', 'Provider comment page was missing or oversized.');
+    const next = this.nextCommentCursor(identity, context, raw.has_more, raw.page_token);
+    const comments = raw.items.map(comment => {
       if (!comment.comment_id) throw new DomainError('UPSTREAM_ERROR', 'Comment ID was missing.');
-      return { comment_id: comment.comment_id, author_open_id: comment.user_id ?? null, quote: comment.quote ?? '', solved: comment.is_solved ?? null, replies: (comment.reply_list?.replies ?? []).map(reply => ({ reply_id: reply.reply_id ?? null, author_open_id: reply.user_id ?? null, elements: reply.content.elements })), replies_complete: comment.has_more === false && Array.isArray(comment.reply_list?.replies) };
+      const complete = comment.has_more === false && Array.isArray(comment.reply_list?.replies);
+      return { comment_id: comment.comment_id, author_open_id: comment.user_id ?? null, quote: comment.quote ?? '', solved: comment.is_solved ?? null, replies: (comment.reply_list?.replies ?? []).map(reply => this.commentReply(reply)), replies_complete: complete, reply_cursor: complete ? null : this.encodeCommentCursor(identity, { operation: 'comment_replies', documentId, commentId: id.parse(comment.comment_id), pageSize: page.page_size, upstream: null, history: [] }) };
     });
-    return { comments, partial: comments.some(comment => !comment.replies_complete), next_cursor: raw.has_more ? this.handles.encode('cursor', identity, { operation: 'comments', documentId, pageSize: page.page_size, upstream: raw.page_token }) : null, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    return { comments, partial: next !== null || comments.some(comment => !comment.replies_complete), next_cursor: next, coverage: 'comments_page' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+  }
+  private commentReply(raw: unknown) {
+    const reply = replySchema.safeParse(raw);
+    if (!reply.success) throw new DomainError('UPSTREAM_ERROR', 'Provider comment reply was incomplete.');
+    return { reply_id: reply.data.reply_id, author_open_id: reply.data.user_id ?? null, elements: reply.data.content.elements };
+  }
+  private encodeCommentCursor(identity: Identity, value: CommentCursor): string {
+    const cursor = this.handles.encode('cursor', identity, value);
+    if (cursor.length > 4096) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Comment cursor exceeds the supported size.');
+    return cursor;
+  }
+  private nextCommentCursor(identity: Identity, context: CommentCursor, hasMore: boolean | undefined, token: string | undefined) {
+    if (typeof hasMore !== 'boolean' || (hasMore && (!token || typeof token !== 'string'))) throw new DomainError('UPSTREAM_ERROR', 'Comment pagination was incomplete.');
+    if (!hasMore) return null;
+    const hash = digest(token!);
+    if (context.history.includes(hash)) throw new DomainError('UPSTREAM_ERROR', 'Provider repeated a comment pagination token.');
+    if (context.history.length >= 20) throw new DomainError('UNSUPPORTED_CAPABILITY', 'Comment pagination exceeds the supported budget.');
+    return this.encodeCommentCursor(identity, { ...context, upstream: token!, history: [...context.history, hash] });
   }
   async messageThread(identity: Identity, messageId: string, input: { page_size?: number; cursor?: string } = {}) {
     id.parse(messageId); requireScope(identity, 'im.read');

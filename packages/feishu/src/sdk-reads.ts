@@ -19,6 +19,8 @@ export interface SdkReadBindings {
   readDocument: Client['docx']['v1']['document']['rawContent'];
   getWikiNode: Client['wiki']['v2']['space']['getNode'];
   listDocComments: Client['drive']['v1']['fileComment']['list'];
+  listCommentReplies: Client['drive']['v1']['fileCommentReply']['list'];
+  batchMetadata: Client['drive']['v1']['meta']['batchQuery'];
   listBaseTables: Client['bitable']['v1']['appTable']['list'];
   listBaseFields: Client['bitable']['v1']['appTableField']['list'];
   searchBaseRecords: Client['bitable']['v1']['appTableRecord']['search'];
@@ -47,6 +49,8 @@ export function bindSdkReads(client: Client): SdkReadBindings {
     readDocument: client.docx.v1.document.rawContent.bind(client.docx.v1.document),
     getWikiNode: client.wiki.v2.space.getNode.bind(client.wiki.v2.space),
     listDocComments: client.drive.v1.fileComment.list.bind(client.drive.v1.fileComment),
+    listCommentReplies: client.drive.v1.fileCommentReply.list.bind(client.drive.v1.fileCommentReply),
+    batchMetadata: client.drive.v1.meta.batchQuery.bind(client.drive.v1.meta),
     listBaseTables: client.bitable.v1.appTable.list.bind(client.bitable.v1.appTable),
     listBaseFields: client.bitable.v1.appTableField.list.bind(client.bitable.v1.appTableField),
     searchBaseRecords: client.bitable.v1.appTableRecord.search.bind(client.bitable.v1.appTableRecord),
@@ -68,6 +72,7 @@ export type SdkReadInput<K extends SdkReadOperation> = Parameters<SdkReadBinding
 export type SdkReadResponse<K extends SdkReadOperation> = Awaited<ReturnType<SdkReadBindings[K]>>;
 export type SdkReadData<K extends SdkReadOperation> = NonNullable<SdkReadResponse<K>['data']>;
 export const operationScopes: Record<SdkReadOperation, string> = {
+  listCommentReplies: 'docs.read', batchMetadata: 'docs.read',
   profile: 'profile.read', searchDocs: 'docs.read', listChats: 'im.read', searchChats: 'im.read', searchMessages: 'im.read', getMessages: 'im.read', listMessages: 'im.read', getDocument: 'docs.read', readDocument: 'docs.read', getWikiNode: 'docs.read', listDocComments: 'docs.read', listBaseTables: 'base.read', listBaseFields: 'base.read', searchBaseRecords: 'base.read', listCalendars: 'calendar.read', listEvents: 'calendar.read', freeBusy: 'calendar.read', roomBusy: 'calendar.read', searchRooms: 'calendar.read', listTasks: 'task.read', getTask: 'task.read', lookupPeopleByEmail: 'people.read', searchPeople: 'people.read',
 };
 
