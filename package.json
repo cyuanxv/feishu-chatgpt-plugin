@@ -1,0 +1,37 @@
+{
+  "name": "feishu-chatgpt-plugin",
+  "version": "0.1.0-dev.4",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "cyuanxv",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run tests/",
+    "dev": "tsx apps/mcp-server/src/main.ts",
+    "start": "node dist/apps/mcp-server/src/main.js",
+    "check:source": "node scripts/check-source.mjs"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.74.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "pg": "^8.23.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cyuanxv/feishu-chatgpt-plugin.git"
+  }
+}

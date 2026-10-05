@@ -1,0 +1,37 @@
+import { describe, expect, it, vi } from 'vitest';
+import { randomBytes } from 'node:crypto';
+import { AuthorizationStateCipher, FeishuOAuthExchange, MemoryAuthorizationStateStore, PostgresAuthorizationStateStore, bindFeishuTokenSdk } from '../packages/auth/src/feishu-exchange.js';
+import { createSafeSdkClient } from '../packages/feishu/src/sdk-client.js';
+
+// All token/client values below are synthetic; transport is always injected and no network is used.
+function setup() {
+  let now = 1_000_000;
+  const response = { accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresIn: 3600, refreshTokenExpiresIn: 86400, scope: 'fixture:read offline_access', tokenType: 'Bearer' };
+  const exchange = vi.fn().mockResolvedValue(response); const refresh = vi.fn().mockResolvedValue(response);
+  const cipher = new AuthorizationStateCipher(randomBytes(32));
+  const store = new MemoryAuthorizationStateStore(cipher, () => now);
+  const flow = new FeishuOAuthExchange({ exchange, refresh }, store, { domain: 'feishu', redirectUri: 'https://callback.example.test/feishu', allowedProviderScopes: ['fixture:read', 'offline_access'] }, () => now);
+  const begin = () => flow.begin('subject-a', 'connection-a', ['fixture:read', 'offline_access']);
+  return { response, exchange, refresh, cipher, store, flow, begin, advance: (ms: number) => { now += ms; } };
+}
+describe('Feishu OAuth exchange core, offline only', () => {
+  it('starts subject-bound PKCE without returning its verifier', async () => { const s = setup(); const start = await s.begin(); expect(start.code_challenge_method).toBe('S256'); expect(start).not.toHaveProperty('verifier'); expect(start).not.toHaveProperty('code_verifier'); expect(start.state).toHaveLength(43); });
+  it('exchanges exactly once using the original redirect and verifier', async () => { const s = setup(); const start = await s.begin(); const result = await s.flow.finish({ state: start.state, subject: 'subject-a', code: 'synthetic-code' }); expect(result.attempt.subject).toBe('subject-a'); expect(result.attempt.connectionId).toBe('connection-a'); expect(result.attempt).not.toHaveProperty('verifier'); expect(s.exchange.mock.calls[0]![0].redirectUri).toBe('https://callback.example.test/feishu'); expect(typeof s.exchange.mock.calls[0]![0].codeVerifier).toBe('string'); await expect(s.flow.finish({ state: start.state, subject: 'subject-a', code: 'synthetic-code' })).rejects.toThrow('state'); expect(s.exchange).toHaveBeenCalledTimes(1); });
+  it('wrong subject cannot consume another pending state', async () => { const s = setup(); const start = await s.begin(); await expect(s.flow.finish({ state: start.state, subject: 'subject-b', code: 'synthetic-code' })).rejects.toThrow('state'); expect(s.exchange).not.toHaveBeenCalled(); await expect(s.flow.finish({ state: start.state, subject: 'subject-a', code: 'synthetic-code' })).resolves.toBeDefined(); });
+  it('does not accept expired state or unauthorized requested scopes', async () => { const s = setup(); const start = await s.begin(); s.advance(600_001); await expect(s.flow.finish({ state: start.state, subject: 'subject-a', code: 'code' })).rejects.toThrow(); await expect(s.flow.begin('subject-a', 'connection-a', ['im.write'])).rejects.toThrow(); expect(s.exchange).not.toHaveBeenCalled(); });
+  it('accepts provider scope narrowing but rejects expanded permissions', async () => { const s = setup(); s.exchange.mockResolvedValueOnce({ ...s.response, scope: 'fixture:read' }); const start = await s.begin(); expect((await s.flow.finish({ state: start.state, subject: 'subject-a', code: 'code' })).grantedProviderScopes).toEqual(['fixture:read']); s.exchange.mockResolvedValueOnce({ ...s.response, scope: 'fixture:read unexpected:write' }); const next = await s.begin(); await expect(s.flow.finish({ state: next.state, subject: 'subject-a', code: 'code' })).rejects.toThrow('outside'); });
+  it.each([{ refreshToken: undefined }, { refreshTokenExpiresIn: undefined }, { scope: ' ' }, { tokenType: 'MAC' }, { expiresIn: Infinity }])('fails closed for incomplete token response %o', async mutation => { const s = setup(); s.exchange.mockResolvedValue({ ...s.response, ...mutation }); const start = await s.begin(); await expect(s.flow.finish({ state: start.state, subject: 'subject-a', code: 'code' })).rejects.toThrow('complete'); });
+  it('does not leak provider failure text or retry authorization codes', async () => { const s = setup(); s.exchange.mockRejectedValue(new Error('sensitive provider response')); const start = await s.begin(); try { await s.flow.finish({ state: start.state, subject: 'subject-a', code: 'code' }); throw new Error('expected rejection'); } catch (error) { expect(String(error)).not.toContain('sensitive provider response'); } expect(s.exchange).toHaveBeenCalledTimes(1); });
+  it('refreshes only within the granted scope set and requires a live refresh grant', async () => { const s = setup(); const tokens = { accessToken: 'synthetic', refreshToken: 'synthetic', expiresAt: 0, refreshExpiresAt: 2_000_000 }; await expect(s.flow.refresh(tokens, ['fixture:read', 'offline_access'])).resolves.toBeDefined(); await expect(s.flow.refresh(tokens, ['fixture:read'])).rejects.toThrow('exceed'); await expect(s.flow.refresh({ ...tokens, refreshExpiresAt: 0 }, ['fixture:read'])).rejects.toThrow('expired'); });
+  it('encrypts PKCE state and atomically consumes it by hashed state plus subject in PostgreSQL', async () => { const s = setup(); const query = vi.fn().mockResolvedValue({ rows: [] }); const store = new PostgresAuthorizationStateStore({ query } as never, s.cipher); const state = randomBytes(32).toString('base64url'); const verifier = randomBytes(32).toString('base64url'); await store.save(state, { subject: 'subject-a', connectionId: 'connection-a', domain: 'feishu', redirectUri: 'https://callback.example.test/feishu', scopes: ['fixture:read'], verifier, expiresAt: 2_000_000 }); const parameters = query.mock.calls[0]![1]; expect(JSON.stringify(parameters).includes(verifier)).toBe(false); expect(JSON.stringify(parameters).includes(state)).toBe(false); await store.consume(state, 'subject-a'); expect(query.mock.calls[1]![0]).toContain('DELETE FROM oauth_link_attempts WHERE state_hash=$1 AND subject=$2 AND expires_at>now() RETURNING sealed'); });
+  it('uses the installed official SDK token API, including PKCE and correct provider host', async () => {
+    const request = vi.fn().mockResolvedValue({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', expires_in: 3600, refresh_token_expires_in: 86400, scope: 'fixture:read', token_type: 'Bearer' });
+    const client = createSafeSdkClient({ appId: 'synthetic-app', appSecret: 'synthetic-secret', domain: 'feishu', httpInstance: { request } as never });
+    const sdk = bindFeishuTokenSdk(client); const response = await sdk.exchange({ code: 'synthetic-code', redirectUri: 'https://callback.example.test/feishu', codeVerifier: 'synthetic-verifier' });
+    expect(request.mock.calls[0]![0].url).toBe('https://accounts.feishu.cn/oauth/v3/token');
+    expect(request.mock.calls[0]![0].data.grant_type).toBe('authorization_code');
+    expect(request.mock.calls[0]![0].data.code_verifier === 'synthetic-verifier').toBe(true);
+    expect(response.expiresIn).toBe(3600);
+    await sdk.refresh({ refreshToken: 'synthetic-refresh' }); expect(request.mock.calls[1]![0].data.grant_type).toBe('refresh_token');
+  });
+});
