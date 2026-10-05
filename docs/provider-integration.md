@@ -18,7 +18,7 @@ The executable MCP endpoint still runs synthetic fixtures. No production OAuth r
 | Base | bitable.v1.appTable.list; appTableField.list; appTableRecord.search | Bounded schema paging, real field-ID-to-name translation, numeric/text/select filter validation, signed pagination |
 | Calendar | calendar.v4.calendar.list; calendarEvent.list; freebusy.batch | Explicit calendar/timezone, all-day dates, unknown-busy handling and candidate slots only when all participants have validated availability |
 | Rooms | vc.v1.room.search; calendar.v4.freebusy.list | Capacity-aware candidates and bounded single-room availability; never sends user_id in a room query; unavailable/failed data remains unknown |
-| Tasks | task.v2.task.list/get | Real guid mapping; list coverage explicitly assigned-to-current-user |
+| Tasks | task.v2.task.list/get/search; task.v2.tasklist.list/tasks | Current-user, explicit tasklist and explicit-assignee workflows; bounded search-to-detail reads, role/status revalidation and preserved partial failures |
 | People | fixed SDK request to contact/v3/users/search; contact.v3.user.batchGetId retained as a lower-level binding | Official CLI-backed user-only name/email search, max 50 Unicode characters/30 results, no guessed continuation and no automatic recipient choice |
 
 All SDK calls force `withUserAccessToken`. No tenant/bot fallback is allowed. The gateway binds the subject, tenant, connection and provider domain and requires logical scopes before token acquisition. Path traversal and payload header injection are rejected. All SDK logs are muted because upstream Axios errors may contain secrets.
@@ -38,7 +38,7 @@ All SDK calls force `withUserAccessToken`. No tenant/bot fallback is allowed. Th
 
 - Actual Feishu OAuth scope names must be verified per endpoint and app type. Internal scopes are not provider scopes
 - Provider authorization URL, production user authentication, consent screen, durable MCP AS and real callback route are not configured
-- Tasklist/other-assignee flows remain incomplete
+- Tasklist discovery is an internal provider helper, not an additional public MCP tool; production routing of the existing `list_tasks` filters remains unconfigured
 - Unified search supports DOCX/Wiki/message and explicit file metadata searches, ordered document-domain results before messages. Each continuation preserves query, connection and scope binding. Base aggregate search is not included yet; file fetch is metadata only
 - Complete live MCP routing and domain-specific output schemas are not wired. Provider methods remain internal and never enter the synthetic MCP envelope
 - Typed API responses are still untrusted. Domain output schema hardening and real empty/partial/error cases require further tests
@@ -55,6 +55,7 @@ All SDK calls force `withUserAccessToken`. No tenant/bot fallback is allowed. Th
 - [Pinned official contact search implementation](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/contact/contact_search_user.go)
 - [Official reply paging implementation](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/drive/drive_list_replies.go), including first-page-only root semantics
 - [Official Drive metadata inspection](https://github.com/larksuite/cli/blob/main/shortcuts/drive/drive_inspect.go)
+- [Official task search implementation](https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/task/task_search.go), confirming explicit assignee filters, query-string pagination and detail enrichment
 - [PGlite](https://pglite.dev/docs/) for the embedded PostgreSQL test engine
 
 Feishu documentation pages that rendered no readable text through the web fetch were not treated as evidence for unverified scope strings or business error codes. The installed official SDK provides the concrete method/payload contracts tested here.
@@ -64,3 +65,9 @@ Feishu documentation pages that rendered no readable text through the web fetch 
 `comments` returns `coverage: comments_page` with a separate `reply_cursor` for every incomplete preview. Pass that cursor back with the same document ID and page size to read `coverage: comment_replies_page`. The first full reply page replaces the preview; subsequent pages merge by `reply_id`. Keep the original document-page `next_cursor` separately to continue other comments. Only the first item on the first full reply page is labeled as the root. A continuation page remains partial by itself; `reply_sequence_complete` says the traversal reached the end, while `replies_complete` is true only when the returned array itself covers all replies. Missing data never proves completeness.
 
 File `fetch` returns `coverage: metadata_only`, `content: null` and explicit `ok`/`failed`/`unknown` status. There is no content cursor or binary fetch. Batch metadata preserves each requested token in order, including provider failures and absent responses. Only file and DOCX metadata are currently supported, up to the verified provider limit of 200 unique tokens. Wiki file search references resolve through the authorized Wiki endpoint before reading the underlying file metadata.
+
+## Task-read semantics
+
+`FeishuProviderTasks.list` accepts the existing PRD's tasklist, assignee and status filters. With a tasklist it uses `tasklist.tasks`, preserving empty pages when `has_more` is true; combined assignee filters are evaluated on explicit returned user/assignee membership. Without a list, an explicit assignee uses `task.search` and exact-ID detail reads. The default uses the `my_tasks` endpoint and explicitly states current-user coverage, never pretending to query another person.
+
+At most twenty detail checks are accepted per assignee-search call, sequentially; gateway retries can produce up to three HTTP attempts per check. This is a local budget, not an asserted provider maximum. Failed detail reads, unknown membership/completion and changed filters appear as omitted hits with partial coverage. Token/authorization failures stop the call. Due timestamps and all-day flags stay in provider form. User names are not resolved or guessed by this workflow; callers must select an explicit person ID first.

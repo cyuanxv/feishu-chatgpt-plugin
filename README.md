@@ -2,7 +2,7 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.5`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.6`
 
 ## Current safety boundary
 
@@ -60,7 +60,7 @@ The product document says 29 tools but enumerates 30. All 30 are tracked in [the
 
 ## Provider implementation progress
 
-The provider slices add 25 finite provider read bindings, targeted domain adapters, scoped document/message search-to-fetch (including Wiki DOCX resolution), message-thread reads and meeting-slot suggestions. File search/fetch returns metadata only, never downloads file contents. Comment previews now expose signed reply-page cursors, supporting a complete explicit read without silently dropping partial replies. People search returns ambiguous candidates without selecting a recipient; room selection combines known capacity with explicit-window availability and marks missing data unknown. Feishu token exchange/refresh primitives, encrypted one-time PKCE state and transactional account linking are also implemented. Contract tests run the actual installed SDK against an injected synthetic HTTP transport. Database integration tests execute real PostgreSQL SQL in memory through PGlite.
+The provider slices add 28 finite provider read bindings, targeted domain adapters, scoped document/message search-to-fetch (including Wiki DOCX resolution), message-thread reads and meeting-slot suggestions. File search/fetch returns metadata only, never downloads file contents. Comment previews expose signed reply-page cursors, supporting a complete explicit read without silently dropping partial replies. People search returns ambiguous candidates without selecting a recipient; room selection combines known capacity with explicit-window availability and marks missing data unknown. Task reads distinguish current-user, explicit tasklist and explicit-assignee coverage, retaining inaccessible/unknown results as partial. Feishu token exchange/refresh primitives, encrypted one-time PKCE state and transactional account linking are also implemented. Contract tests run the actual installed SDK against an injected synthetic HTTP transport. Database integration tests execute real PostgreSQL SQL in memory through PGlite.
 
 These modules are **not wired into the demo MCP listener**. They have not contacted Feishu or exchanged real credentials. See [provider integration status](docs/provider-integration.md) for exact endpoint coverage and incomplete features.
 

@@ -114,7 +114,7 @@ export class FeishuProviderReads {
   }
   async task(identity: Identity, taskId: string) {
     id.parse(taskId); const raw = await this.gateway.call('getTask', { path: { task_guid: taskId }, params: { user_id_type: 'open_id' } }, identity);
-    if (!raw.task?.guid) throw new DomainError('UPSTREAM_ERROR', 'Provider task response was incomplete.');
+    if (raw.task?.guid !== taskId) throw new DomainError('UPSTREAM_ERROR', 'Provider task response was incomplete or mismatched.');
     return { task_id: raw.task.guid, title: raw.task.summary ?? '', description: raw.task.description ?? '', due: raw.task.due ?? null, completed_at: raw.task.completed_at ?? null, source: 'feishu_api' as const };
   }
   /** Explicit lower-level schemas preserve SDK field names; high-level Base/calendar mappers are the next slice. */
