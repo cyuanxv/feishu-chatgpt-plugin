@@ -2,13 +2,13 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.9`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.10`
 
 ## Current safety boundary
 
-- The executable starts a **loopback-only synthetic demo**. It cannot bind to a public address or enable live mode.
+- The default `npm start` executable starts a **loopback-only synthetic demo** and still rejects live mode. A separate single-tool resource-server candidate is now available for integration testing; it refuses startup unless explicitly configured and enabled
 - Its OAuth broker is a protocol test harness. It **does not authenticate people**. Demo account selection is intentional and only accesses synthetic records. Never put it behind a tunnel, reverse proxy or public service.
-- No Feishu credentials are read, requested, configured or included. Tokens used in tests are generated or synthetic.
+- No real Feishu credentials were read, configured or used during development. Tokens used in tests are synthetic. The separate candidate can load operator-supplied secrets only after its explicit runtime gate is enabled
 - Thirteen planned write tools are not registered. Raw API/HTTP executors, deletion, approval and admin operations are absent.
 - The SQL migrations and encrypted repositories are tested against in-memory PostgreSQL via PGlite. Remote/native PostgreSQL, multi-connection locks, operational roles and production deployment remain unverified.
 - This is not a submission-ready public plugin. Adding workflows does not resolve the directory's restriction on unofficial third-party connectors.
@@ -66,7 +66,7 @@ These modules are **not wired into the demo MCP listener**. They have not contac
 
 The current orchestration also connects explicit Base searches to metadata-only fetch, traverses visible calendars with explicit continuation, and rejects thread cursor loops or incomplete pages. Agenda ordering is per calendar/provider, not a claim of global chronological sorting. Missing calendar access stays visible as partial coverage.
 
-An internal `ProviderReadRouter` now routes all 17 reads through the shared input/policy/audit/envelope boundary. Tests drive every route through the installed SDK's injected transport and reject all 13 writes. It remains unreferenced by the HTTP server. Its supplied caller context is **not a bearer-token authenticator**, and `live_verified` is always false. See [the connection checklist](docs/next-steps.md) before any real setup.
+The `ProviderReadRouter` routes all 17 reads through the shared input/policy/audit/envelope boundary. The mock server does not import it. The new `agenda-server` candidate exposes only `get_agenda` after verifying an opaque Bearer token against persisted grants and account generations, checking actual calendar permissions and loading the linked encrypted user token. Tests use synthetic grants in PGlite and the actual SDK with injected transport. **Human login, consent and the production token issuer are still absent**; test grant seeding is not a production setup path. `live_verified` remains false. See [the exact integration boundary](docs/agenda-resource-candidate.md).
 
 ## Next verified milestones
 

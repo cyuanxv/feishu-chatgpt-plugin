@@ -28,6 +28,7 @@ export interface SdkReadBindings {
   searchBaseRecords: Client['bitable']['v1']['appTableRecord']['search'];
   listCalendars: Client['calendar']['v4']['calendar']['list'];
   listEvents: Client['calendar']['v4']['calendarEvent']['list'];
+  agendaInstances: Client['calendar']['v4']['calendarEvent']['instanceView'];
   freeBusy: Client['calendar']['v4']['freebusy']['batch'];
   roomBusy: Client['calendar']['v4']['freebusy']['list'];
   searchRooms: Client['vc']['v1']['room']['search'];
@@ -63,6 +64,7 @@ export function bindSdkReads(client: Client): SdkReadBindings {
     searchBaseRecords: client.bitable.v1.appTableRecord.search.bind(client.bitable.v1.appTableRecord),
     listCalendars: client.calendar.v4.calendar.list.bind(client.calendar.v4.calendar),
     listEvents: client.calendar.v4.calendarEvent.list.bind(client.calendar.v4.calendarEvent),
+    agendaInstances: client.calendar.v4.calendarEvent.instanceView.bind(client.calendar.v4.calendarEvent),
     freeBusy: client.calendar.v4.freebusy.batch.bind(client.calendar.v4.freebusy),
     roomBusy: client.calendar.v4.freebusy.list.bind(client.calendar.v4.freebusy),
     searchRooms: client.vc.v1.room.search.bind(client.vc.v1.room),
@@ -96,6 +98,7 @@ export type SdkReadInput<K extends SdkReadOperation> = Parameters<SdkReadBinding
 export type SdkReadResponse<K extends SdkReadOperation> = Awaited<ReturnType<SdkReadBindings[K]>>;
 export type SdkReadData<K extends SdkReadOperation> = NonNullable<SdkReadResponse<K>['data']>;
 export const operationScopes: Record<SdkReadOperation, string> = {
+  agendaInstances:'calendar.read',
   listCommentReplies: 'docs.read', batchMetadata: 'docs.read',
   searchTasks: 'task.read', listTasklists: 'task.read', listTasklistTasks: 'task.read',
   searchBases: 'base.read', resolveBaseWiki: 'base.read',

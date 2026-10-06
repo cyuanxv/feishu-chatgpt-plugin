@@ -20,4 +20,17 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run smoke:production
       - run: npm run check:source
+  container-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t feishu-agenda-candidate .
+      - name: Refuse unconfigured container startup
+        run: |
+          set +e
+          docker run --rm -e FEISHU_PROVIDER_RUNTIME=disabled feishu-agenda-candidate
+          result=$?
+          set -e
+          test "$result" -eq 78

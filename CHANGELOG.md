@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.10
+
+- Added a single-tool HTTP resource-server candidate for get_agenda with persisted opaque Bearer verification, audience/expiry/revocation and account-generation checks
+- Stored actual provider scope grants separately and revalidated them plus encrypted user credentials before every provider read
+- Used the official recurring-event instance_view contract, bounded local paging and content-version checks for the candidate agenda
+- Added migration 003, default-disabled provider entrypoint, verified-TLS configuration, Docker recipe and production import/refusal smoke check
+- 414 offline tests pass; real human login/consent/issuer, Feishu grants, native PostgreSQL, HTTPS hosting and ChatGPT installation remain unverified
+- No real credentials, external authorization, deployment, PR merge or fee commitment was performed
+
 ## 0.1.0-dev.9
 
 - Added an inert finite router for all seventeen provider reads, reusing shared input schemas, scope policy, rate limits, audit and envelope validation

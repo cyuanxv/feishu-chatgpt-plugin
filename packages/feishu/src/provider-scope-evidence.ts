@@ -2,6 +2,8 @@ import { DomainError } from '../../policy/src/core.js';
 
 /** Verified minimum provider permissions. These are documentation/configuration evidence, not user grants. */
 export const providerScopeEvidence = {
+  listCalendars: { minimum: ['calendar:calendar:read'], identity: 'user-required-by-this-project', source: 'https://github.com/larksuite/cli/blob/main/internal/registry/catalog/services/calendar.json' },
+  agendaInstances: { minimum: ['calendar:calendar.event:read'], identity: 'user-required-by-this-project', source: 'https://github.com/larksuite/cli/blob/main/internal/registry/catalog/services/calendar.json' },
   searchBases: { minimum: ['search:docs:read'], identity: 'user-required-by-this-project; full-provider-identity-matrix-unverified', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/base/base_resolve.go' },
   resolveBaseWiki: { minimum: ['wiki:node:retrieve'], identity: 'user-required-by-this-project; full-provider-identity-matrix-unverified', source: 'https://github.com/larksuite/cli/blob/main/shortcuts/base/base_resolve.go' },
   searchTasks: { minimum: ['task:task:read'], identity: 'user', source: 'https://github.com/larksuite/cli/blob/7beffb086d7fa3c5b843d8affa7c089f49cfc65e/shortcuts/task/task_search.go' },

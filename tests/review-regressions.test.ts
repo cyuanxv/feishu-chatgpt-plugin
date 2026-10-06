@@ -31,7 +31,7 @@ describe('independent second-slice negative checks',()=>{
  });
  it('a pre-disconnect refresh cannot overwrite a later re-linked grant with the same connection ID',async()=>{
   const db=await PGlite.create();try {
-   for(const file of ['001_connections.sql','002_oauth_link_attempts.sql'])await db.exec(await readFile(new URL(`../infra/migrations/${file}`,import.meta.url),'utf8'));
+   for(const file of ['001_connections.sql','002_oauth_link_attempts.sql','003_resource_access.sql'])await db.exec(await readFile(new URL(`../infra/migrations/${file}`,import.meta.url),'utf8'));
    const query=async(sql:string,values?:unknown[])=>{const result=await db.query(sql,values);return {...result,rowCount:result.affectedRows??result.rows.length}};
    const pool={connect:async()=>({query,release:()=>{}})};const cipher=new TokenCipher(new Map([['review',randomBytes(32)]]),'review');
    const repository=new PostgresConnectionRepository(pool as never,cipher);const store=new PostgresTokenStore({query} as never,cipher);const identity=demoIdentity();

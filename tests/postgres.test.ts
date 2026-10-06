@@ -21,7 +21,7 @@ const identity = demoIdentity();
 const tokens = { accessToken: 'synthetic-access-db', refreshToken: 'synthetic-refresh-db', expiresAt: Date.now() + 3_600_000, refreshExpiresAt: Date.now() + 86_400_000 };
 beforeAll(async () => {
   db = await PGlite.create();
-  for (const file of ['001_connections.sql', '002_oauth_link_attempts.sql']) await db.exec(await readFile(new URL(`../infra/migrations/${file}`, import.meta.url), 'utf8'));
+  for (const file of ['001_connections.sql', '002_oauth_link_attempts.sql', '003_resource_access.sql']) await db.exec(await readFile(new URL(`../infra/migrations/${file}`, import.meta.url), 'utf8'));
 }, 30_000);
 beforeEach(async () => { await db.exec('TRUNCATE feishu_connections, oauth_link_attempts CASCADE'); });
 afterAll(async () => { await db.close(); });

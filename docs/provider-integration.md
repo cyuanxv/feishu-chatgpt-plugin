@@ -4,7 +4,7 @@
 
 The provider slices compile against `@larksuiteoapi/node-sdk` 1.74.0. Contract tests instantiate this official SDK with a synthetic injected HTTP client and inspect the actual endpoint, method and payload it produces. They do not reimplement a fake SDK or contact a live service.
 
-The executable MCP endpoint still runs synthetic fixtures. No production OAuth router, authorized account or live backend is selected. `FEISHU_MODE=live` remains rejected. Provider modules return `source: feishu_api` where normalized, but these results are not mixed into the demo's `synthetic_mock` envelope. The finite `ProviderReadRouter` is now an internally tested seam for all seventeen reads, never imported by the HTTP server; it always marks `live_verified: false`.
+The default MCP executable still runs synthetic fixtures and rejects `FEISHU_MODE=live`. Provider modules return `source: feishu_api` where normalized, without mixing these results into the demo's `synthetic_mock` envelope. A separate single-tool HTTP resource-server candidate now uses the router only for `get_agenda`, verifies persisted Bearer grants and rechecks actual provider permissions before each Feishu read. Its test transport and grants remain synthetic. Production login/consent/issuance and live validation are absent; `live_verified` stays false. See [the candidate boundary](agenda-resource-candidate.md).
 
 ## Confirmed SDK bindings
 
@@ -41,7 +41,7 @@ All SDK calls force `withUserAccessToken`. No tenant/bot fallback is allowed. Th
 - Tasklist discovery is an internal provider helper, not an additional public MCP tool; production routing of the existing `list_tasks` filters remains unconfigured
 - Unified search supports DOCX/Wiki/message plus explicit file/Base metadata searches, ordered document-domain results, then messages, then Bases. The default domains remain DOCX/Wiki/message. Each continuation preserves query, connection and scope binding. File/Base fetch is metadata only
 - Not every PRD input filter is wired to every provider workflow. Unified search currently rejects unsupported owner/time/chat constraints rather than silently dropping them; Base discovery requires a keyword instead of claiming all-app enumeration. Production dispatch and complete input/output parity remain work to finish
-- The internal provider router is implemented, but a live MCP server/authenticated middleware/real provider-grant gate are not wired. Domain-specific output schemas still need broader hardening. Provider data never enters the synthetic MCP envelope
+- The candidate HTTP server has a durable token/grant verifier for the single agenda slice. No production human-login/consent/token-issuance path exists yet, and no live service has been enabled. Domain-specific output schemas still need broader hardening. Provider data never enters the synthetic MCP envelope
 - Typed API responses are still untrusted. Domain output schema hardening and real empty/partial/error cases require further tests
 - Unknown Feishu business error codes fail safely without guessing a meaning or retrying. Exact endpoint-specific business-code classification remains to be verified
 

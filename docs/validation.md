@@ -1,5 +1,13 @@
 # Validation record
 
+## Tenth slice, one-tool HTTP resource candidate
+
+Version `0.1.0-dev.10` has **414 passing tests across eighteen files** before independent review. New tests run the actual HTTP/MCP path through PGlite-backed opaque access-token/grant validation, current account generation, actual provider-scope checks, encrypted credential loading, the existing provider router and the official SDK's injected recurring-instance transport. Cases cover revoke/relink, lost scopes during traversal, wrong audience/subject, same-tenant account isolation, token separation, duplicate headers, streamed body limits and stable instance pagination.
+
+Typecheck, complete test suite, TypeScript build, compiled provider-entrypoint import/refusal smoke and source allowlist checks run in the current cloud environment. The baseline was restored from the verified dev9 export after the old shared path disappeared; tests use an isolated copy of the existing dependency tree. No fresh dependency install was performed.
+
+Docker/Podman are absent in this cloud executor, so the Docker image has **not** been built or run here. A CI build-and-default-refusal job is included for review and later verification against the published commit. The Node smoke verifies the compiled entrypoint and disabled default only. PGlite still does not establish native PostgreSQL multi-connection behavior or TLS. No actual Feishu authorization, production token issuance, public listener, ChatGPT host or deployment was tested.
+
 ## Ninth slice, finite provider routing seam
 
 Version `0.1.0-dev.9` has **369 passing automated tests across sixteen files**, before independent review. Thirty-nine new tests cover all seventeen routes, all thirteen write denials, actual SDK injected-transport calls, out-of-band context validation, audience/session/expiry checks, source/ref isolation, metadata-only logs, rate/output budgets, unsupported-filter rejection, Base ref/paging and capacity-only room metadata. The synthetic server retains its existing HTTP/MCP tests and live-mode refusal. A structurally valid supplied context is not proof of real authentication; production middleware and provider grant verification are absent.
@@ -32,7 +40,7 @@ Version `0.1.0-dev.3` extends the offline provider layer with cross-domain conti
 
 Provider cursor history now rejects repeated and A→B→A cyclic tokens and bounds continuation to twenty provider pages. A missing nested comment `replies` array remains partial. Missing message bodies fail rather than being represented as empty source text. The reviewer's initial workflow edge cases were added to the formal regression suite.
 
-No production configuration was supplied or used. Real Feishu, a live ChatGPT OAuth roundtrip and native concurrent PostgreSQL remain unverified. The mock executable is still the only runnable HTTP listener.
+At that third-slice cut, no production configuration was supplied or used and the mock executable was the only runnable HTTP listener. Real Feishu, a live ChatGPT OAuth roundtrip and native concurrent PostgreSQL remain unverified in the current development candidate as well.
 
 ## Second slice, after independent-review fixes
 

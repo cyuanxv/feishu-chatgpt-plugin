@@ -16,9 +16,9 @@ const replySchema = z.object({ reply_id: id, user_id: z.string().optional(), con
 
 /** Specific read workflows over the reviewed provider adapters; still not exposed through a live HTTP listener. */
 export class FeishuProviderWorkflows {
-  constructor(private readonly reads: FeishuProviderReads, private readonly domains: FeishuProviderDomains, private readonly gateway: FeishuSdkReadGateway, private readonly handles: Handles) {}
+  constructor(private readonly reads: FeishuProviderReads, private readonly domains: FeishuProviderDomains, private readonly gateway: FeishuSdkReadGateway, private readonly handles: Handles, private readonly agendaReader?: FeishuProviderAgenda) {}
   async agenda(identity: Identity, input: { time_range: { start: string; end: string }; timezone: string; page_size?: number; cursor?: string }) {
-    return new FeishuProviderAgenda(this.domains, this.handles).list(identity, input);
+    return (this.agendaReader ?? new FeishuProviderAgenda(this.domains, this.handles)).list(identity, input);
   }
   async search(identity: Identity, input: SearchInput) {
     requireScope(identity, 'search.read');

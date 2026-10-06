@@ -11,7 +11,7 @@ type State = z.infer<typeof stateSchema>;
 
 /** Explicit traversal of visible calendars. Calendar/provider order, not a fabricated global chronology. */
 export class FeishuProviderAgenda {
-  constructor(private readonly domains:FeishuProviderDomains,private readonly handles:Handles) {}
+  constructor(private readonly domains:Pick<FeishuProviderDomains,'calendars'|'agenda'>,private readonly handles:Handles) {}
   async list(identity:Identity,input:z.input<typeof inputSchema>) {
     requireScope(identity,'calendar.read');
     const parsed=inputSchema.parse(input);
