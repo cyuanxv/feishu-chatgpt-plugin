@@ -1,5 +1,13 @@
 # Validation record
 
+## Eleventh slice, single-agenda browser/issuer candidate
+
+`0.1.0-dev.11` has 480 passing local tests across twenty active files, plus five explicitly skipped native PostgreSQL concurrency cases awaiting CI. Typecheck, build, both compiled default-disabled entrypoint smoke checks and source allowlist checks are required for this cut. New tests cover browser-bound provider state, confidential-client v3/S256, verified tenant/user identity, explicit same-origin CSRF-protected consent, exact OAuth client/redirect/resource binding, durable code/token replay, refresh-family revocation and HTTP agenda reads with separate provider credentials. The full browser-to-agenda test creates grants through the candidate flow rather than SQL seeding.
+
+The native PostgreSQL cases use only the dedicated ephemeral GitHub CI service and an owned random schema. They do not read DATABASE_URL or operator credentials. They are not a local pass and do not validate a hosted database, TLS, backup, key management or real Feishu refresh. The dev10 Docker image and disabled-startup checks passed public CI; dev11 image/issuer checks require the new exact-commit run. No real account authorization, secret configuration, deployment, browser usability/HTTPS-cookie test or ChatGPT installation has been performed.
+
+The first dev11 review identified that a consent form protected only by `form-action self` can block the final cross-origin OAuth redirect in browsers. R2 keeps the other CSP directives and allows only the current persisted, revalidated callback URI on its consent page. It rejects CSP separators/wildcards in registered redirect configuration and tests separation between two clients. A cloud-browser attempt to reach the synthetic loopback fixture returned `ERR_BLOCKED_BY_CLIENT`; the tab/server were closed, with no alternate access path or browser-pass claim. Real HTTPS browser acceptance remains required.
+
 ## Tenth slice, one-tool HTTP resource candidate
 
 Version `0.1.0-dev.10` has **414 passing tests across eighteen files** before independent review. New tests run the actual HTTP/MCP path through PGlite-backed opaque access-token/grant validation, current account generation, actual provider-scope checks, encrypted credential loading, the existing provider router and the official SDK's injected recurring-instance transport. Cases cover revoke/relink, lost scopes during traversal, wrong audience/subject, same-tenant account isolation, token separation, duplicate headers, streamed body limits and stable instance pagination.

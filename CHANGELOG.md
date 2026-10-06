@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-dev.11
+
+- Added a separate, default-disabled Feishu browser login and single-agenda OAuth issuer candidate using official v3 token and user_info contracts
+- Added explicit same-origin consent, secure browser/state/CSRF binding, stable provider account mapping and encrypted short-lived pending credentials
+- Added transactional authorization codes and hashed MCP access/refresh tokens, exact client/redirect/resource/S256 binding, rotation and committed family revocation on replay
+- Reused official MCP SDK token/revocation handlers; pre-registered public clients only, with no DCR/CIMD or arbitrary callback fetching
+- Added a full synthetic HTTP authorization-to-agenda test that does not seed connections/grants/tokens directly
+- Added five native PostgreSQL concurrency cases for an isolated CI-only synthetic service; these are skipped locally and must pass CI before being claimed
+- Real Feishu authorization, hosted PostgreSQL/TLS/roles, browser/ChatGPT acceptance and automatic Feishu refresh remain unverified or incomplete
+
 ## 0.1.0-dev.10
 
 - Added a single-tool HTTP resource-server candidate for get_agenda with persisted opaque Bearer verification, audience/expiry/revocation and account-generation checks
