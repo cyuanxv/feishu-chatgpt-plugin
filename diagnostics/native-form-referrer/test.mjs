@@ -3,6 +3,7 @@ import { access, mkdir, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { startFixture } from './fixture.mjs';
+import { failureCategory } from './failure-category.mjs';
 
 const output = new URL('./evidence/', import.meta.url);
 const fixture = await startFixture();
@@ -24,23 +25,37 @@ try {
     executablePath,
     headless: true,
     chromiumSandbox: true,
+    // CDP Browser.getBrowserCommandLine requires this flag; Playwright 1.62
+    // no longer includes it in its default Chromium arguments.
+    args: ['--enable-automation'],
     timeout: 20000,
     // Never inherit account tokens, proxies, browser profiles, or provider config.
     env: { PATH: process.env.PATH || '/usr/bin:/bin', LANG: 'C.UTF-8' },
   });
   summary.browser_version = browser.version();
-  stage = 'active-browser-sandbox';
+  stage = 'sandbox-create-cdp-session';
   const session = await browser.newBrowserCDPSession();
+  stage = 'sandbox-read-browser-command-line';
   const command = await session.send('Browser.getBrowserCommandLine');
+  stage = 'sandbox-validate-browser-command-line';
+  check('browser-command-line-is-string-array', Array.isArray(command.arguments) && command.arguments.every(argument => typeof argument === 'string'));
+  check('browser-command-enables-automation', command.arguments.includes('--enable-automation'));
   const sandboxDisablers = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-namespace-sandbox', '--disable-seccomp-filter-sandbox'];
   check('browser-command-has-no-sandbox-disablers', !command.arguments.some(argument => sandboxDisablers.some(flag => argument === flag || argument.startsWith(flag + '='))));
+  stage = 'sandbox-detach-cdp-session';
   await session.detach();
+  stage = 'sandbox-create-report-page';
   const sandboxPage = await browser.newPage();
+  stage = 'sandbox-navigate-report-page';
   await sandboxPage.goto('chrome://sandbox', { timeout: 5000 });
+  stage = 'sandbox-read-report-page';
   const sandboxText = await sandboxPage.locator('body').innerText();
+  stage = 'sandbox-assert-active-seccomp';
   summary.seccomp_bpf_active = /Seccomp-BPF sandbox\s+Yes/i.test(sandboxText);
   check('browser-reports-active-seccomp-sandbox', summary.seccomp_bpf_active);
+  stage = 'sandbox-close-report-page';
   await sandboxPage.close();
+  stage = 'fixture-create-browser-context';
   const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
   const allowedOrigins = new Set([fixture.sourceOrigin, fixture.destinationOrigin]);
   let nonLoopbackAttempt = false;
@@ -118,17 +133,18 @@ try {
 } catch (error) {
   // Avoid dumping request objects, headers, user environment, or browser launch logs.
   summary.failure_stage = stage;
-  const message = String(error?.message || '');
-  summary.sandbox_environment_blocked = /No usable sandbox|Operation not permitted|Failed to move to new namespace|sandbox.*failed/i.test(message);
+  summary.failure_category = failureCategory(error);
+  summary.sandbox_environment_blocked = summary.failure_category === 'sandbox_environment';
   process.exitCode = 1;
 } finally {
   clearTimeout(watchdog);
-  await browser?.close();
-  await fixture.close();
+  const cleanupResults = await Promise.allSettled([browser?.close(), fixture.close()]);
+  summary.cleanup_failed = cleanupResults.some(result => result.status === 'rejected');
+  if (summary.cleanup_failed) { summary.passed = false; process.exitCode = 1; }
   summary.observations = fixture.observations;
   const bytes = JSON.stringify(summary, null, 2) + '\n';
   assert.ok(Buffer.byteLength(bytes) <= 64 * 1024, 'Evidence exceeds 64 KiB');
   await mkdir(output, { recursive: true });
   await writeFile(new URL('result.json', output), bytes);
-  console.log(JSON.stringify({ passed: summary.passed, failure_stage: summary.failure_stage, checks: checks.length, evidence_bytes: Buffer.byteLength(bytes) }));
+  console.log(JSON.stringify({ passed: summary.passed, failure_stage: summary.failure_stage, failure_category: summary.failure_category, checks: checks.length, evidence_bytes: Buffer.byteLength(bytes) }));
 }
