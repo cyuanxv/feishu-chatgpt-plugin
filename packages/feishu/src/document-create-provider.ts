@@ -58,11 +58,20 @@ export class DocumentCreateProvider {
       if (!object(data.task) || data.document !== undefined || data.result !== undefined) return unknown(expectedTask ?? null);
       const task = data.task; const id = documentResourceId.safeParse(task.task_id);
       if (!id.success || (expectedTask !== undefined && id.data !== expectedTask)) return unknown(expectedTask ?? null);
-      if (task.type !== 'create_document') return unknown(id.data);
-      if (task.status === 'processing') return { ...unknown(id.data), status: 'pending' };
-      if (task.status === 'failed' || task.status === 'expired') return { ...unknown(id.data), status: 'failed' };
-      if (task.status !== 'succeeded' || !object(task.result) || typeof task.result.create_document !== 'string' || task.result.create_document.length > 262_144) return unknown(id.data);
-      try { return this.document(JSON.parse(task.result.create_document), id.data); } catch { return unknown(id.data); }
+      const outerWarnings = data.warnings === undefined ? 0 : Array.isArray(data.warnings) ? data.warnings.length : null;
+      if (outerWarnings === null || outerWarnings > 131_072) return unknown(id.data);
+      const uncertain = { ...unknown(id.data), warningCount: outerWarnings };
+      if (task.type !== 'create_document' ||
+          (task.status !== 'succeeded' && task.result !== undefined) ||
+          (!['failed','expired'].includes(String(task.status)) && task.failure !== undefined)) return uncertain;
+      if (task.status === 'processing') return { ...uncertain, status: 'pending' };
+      if (task.status === 'failed' || task.status === 'expired') return { ...uncertain, status: 'failed' };
+      if (task.status !== 'succeeded' || !object(task.result) || typeof task.result.create_document !== 'string' || task.result.create_document.length > 262_144) return uncertain;
+      try {
+        const result = this.document(JSON.parse(task.result.create_document),id.data);
+        const warningCount = Math.max(result.warningCount,outerWarnings);
+        return { ...result,warningCount,status:result.status === 'succeeded' && warningCount > 0 ? 'partial' : result.status };
+      } catch { return uncertain; }
     }
     if (expectedTask !== undefined) return unknown(expectedTask);
     return this.document(data, null);
@@ -85,7 +94,7 @@ export class DocumentCreateProvider {
     if (typeof raw !== 'string' || raw.length > 2048) return null;
     try {
       const url = new URL(raw); const suffix = this.domain === 'feishu' ? 'feishu.cn' : 'larksuite.com';
-      return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash &&
+      return url.protocol === 'https:' && !url.port && !url.username && !url.password && !url.search && !url.hash &&
         (url.hostname === suffix || url.hostname.endsWith('.' + suffix)) && url.pathname === '/docx/' + id ? url.href : null;
     } catch { return null; }
   }

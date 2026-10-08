@@ -122,7 +122,7 @@ describe('default-off, durable document creation candidate',()=>{
     expect((await workflow().execute(bearer,s.id,input))).toMatchObject({status:'executing',may_have_created:true,automatic_create_retry_allowed:false});expect(transport).not.toHaveBeenCalled();
   });
   it('never recreates after the provider succeeds but receipt persistence fails',async()=>{
-    let fail=true;const failingStore=new PostgresDocumentWriteStore({query:async(sql:string,values?:unknown[])=>{if(fail&&sql.includes('SET status=$1,receipt')){fail=false;throw new Error('synthetic storage failure');}return query(sql,values);}} as never);
+    let fail=true;const failingStore=new PostgresDocumentWriteStore({query:async(sql:string,values?:unknown[])=>{if(fail&&sql.includes('receipt=jsonb_set')){fail=false;throw new Error('synthetic storage failure');}return query(sql,values);}} as never);
     const w=new CreateDocumentWorkflow(access,failingStore,authority,()=>provider,{enabled:true});const s=await approved(w);
     await expect(w.execute(bearer,s.id,input)).rejects.toMatchObject({type:'UPSTREAM_ERROR'});
     expect((await workflow().execute(bearer,s.id,input)).status).toBe('executing');expect(transport).toHaveBeenCalledTimes(1);
@@ -154,6 +154,26 @@ describe('default-off, durable document creation candidate',()=>{
     transport.mockResolvedValue({code:0,data:{...created.data,warnings:['raw-sensitive-fixture-warning']}});const s=await approved();const receipt=await s.w.execute(bearer,s.id,input);
     expect(receipt).toMatchObject({status:'partial',warnings_count:1,content_verified:false});expect(JSON.stringify(receipt)).not.toContain('raw-sensitive');expect(JSON.stringify((await query('SELECT * FROM document_write_intents')).rows)).not.toContain('raw-sensitive');
   });
+  it('retains warnings from initial processing through a later clean task completion',async()=>{
+    transport.mockResolvedValueOnce({code:0,data:{...task('processing').data,warnings:['initial warning']}}).mockResolvedValueOnce(asyncDone());const s=await approved();
+    expect(await s.w.execute(bearer,s.id,input)).toMatchObject({status:'pending',warnings_count:1});
+    expect(await s.w.getReceipt(bearer,s.id,true)).toMatchObject({status:'partial',document_id:'doc_created',warnings_count:1,warning_count_mode:'max_observed'});
+  });
+  it('upgrades success when a late warned processing poll arrives, preserving the document receipt',async()=>{
+    transport.mockResolvedValueOnce(task('processing'));const s=await approved();await s.w.execute(bearer,s.id,input);
+    let release!:(value:unknown)=>void;let started!:()=>void;const reached=new Promise<void>(resolve=>{started=resolve;});
+    transport.mockImplementationOnce(async()=>{started();return new Promise(resolve=>{release=resolve;});}).mockResolvedValueOnce(asyncDone());
+    const late=s.w.getReceipt(bearer,s.id,true);await reached;expect((await workflow().getReceipt(bearer,s.id,true)).status).toBe('succeeded');
+    release({code:0,data:{...task('processing').data,warnings:['late warning']}});
+    expect(await late).toMatchObject({status:'partial',document_id:'doc_created',revision_id:1,url:created.data.document.url,warnings_count:1});
+    expect(await s.w.getReceipt(bearer,s.id)).toMatchObject({status:'partial',document_id:'doc_created'});
+  });
+  it('retains maximum observed warning counts without counting repeated polls twice',async()=>{
+    const warned={code:0,data:{...task('processing').data,warnings:['one','two']}};
+    transport.mockResolvedValueOnce(warned).mockResolvedValueOnce(warned).mockResolvedValueOnce({code:0,data:{...asyncDone().data,warnings:['one']}});const s=await approved();
+    await s.w.execute(bearer,s.id,input);expect((await s.w.getReceipt(bearer,s.id,true)).warnings_count).toBe(2);
+    expect(await s.w.getReceipt(bearer,s.id,true)).toMatchObject({status:'partial',warnings_count:2});
+  });
   it.each(["UPDATE oauth_grants SET revoked_at=now()","UPDATE feishu_connections SET grant_generation=2","UPDATE feishu_connections SET provider_scopes='{}'","UPDATE feishu_connections SET status='revoked'"])('rechecks current grants before a confirmed write %s',async sql=>{
     const s=await approved();await db.exec(sql);await expect(s.w.execute(bearer,s.id,input)).rejects.toThrow();expect(transport).not.toHaveBeenCalled();
   });
@@ -161,6 +181,11 @@ describe('default-off, durable document creation candidate',()=>{
     const guarding={authenticate:access.authenticate.bind(access),token:async(b:string,p:Parameters<typeof access.token>[1])=>{await db.exec('UPDATE oauth_grants SET revoked_at=now()');return access.token(b,p);}};
     const w=new CreateDocumentWorkflow(guarding,store,authority,()=>provider,{enabled:true});const s=await approved(w);
     expect((await w.execute(bearer,s.id,input))).toMatchObject({status:'failed',reason:'authorization_changed',may_have_created:false});expect(transport).not.toHaveBeenCalled();
+  });
+  it.each(["UPDATE oauth_grants SET revoked_at=now()","UPDATE oauth_grants SET client_id='other_client'"])('revalidates grant changes during asynchronous credential loading %s',async sql=>{
+    const delayedAccess=new PostgresDocumentWriteAccess({query} as never,{snapshot:async who=>{await db.exec(sql);return tokenStore.snapshot(who);}},resource);
+    const w=new CreateDocumentWorkflow(delayedAccess,store,authority,()=>provider,{enabled:true});const s=await approved(w);
+    expect(await w.execute(bearer,s.id,input)).toMatchObject({status:'failed',reason:'authorization_changed',may_have_created:false});expect(transport).not.toHaveBeenCalled();
   });
   it('requires separate internal write scope and actual provider consent',async()=>{
     await db.exec("UPDATE oauth_grants SET scopes=ARRAY['profile.read']; UPDATE feishu_connections SET scopes=ARRAY['profile.read']");

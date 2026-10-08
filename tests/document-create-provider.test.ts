@@ -35,6 +35,9 @@ describe('bounded official-CLI document create wire contract',()=>{
     {task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:'{}'}},
     {task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:'not-json'}},
     {task_id:'../evil',type:'create_document',status:'processing'},
+    {task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(success.data)},failure:{code:'execution_interrupted'}},
+    {task_id:'task_fixture',type:'create_document',status:'processing',failure:{code:'failure'}},
+    {task_id:'task_fixture',type:'create_document',status:'failed',result:{create_document:JSON.stringify(success.data)}},
   ])('retains uncertainty for unsupported async contracts %s',async task=>{
     const s=setup({code:0,data:{task}});expect((await s.provider.create(input,'synthetic')).status).toBe('uncertain');
   });
@@ -42,11 +45,19 @@ describe('bounded official-CLI document create wire contract',()=>{
     const s=setup({code:0,data:{task:{task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:'{"result":"failed"}'}}}});
     expect((await s.provider.poll('task_fixture','synthetic')).status).toBe('failed');
   });
+  it('retains valid outer warnings on async success rather than reporting pristine success',async()=>{
+    const s=setup({code:0,data:{warnings:['outer warning'],task:{task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(success.data)}}}});
+    expect(await s.provider.create(input,'synthetic')).toMatchObject({status:'partial',warningCount:1,documentId:'doc_fixture'});
+  });
+  it('rejects malformed outer warnings while retaining the known task ID',async()=>{
+    const s=setup({code:0,data:{warnings:'malformed',task:{task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(success.data)}}}});
+    expect(await s.provider.create(input,'synthetic')).toMatchObject({status:'uncertain',taskId:'task_fixture',documentId:null});
+  });
   it('rejects a polled task substitution without adopting its task ID',async()=>{
     const s=setup({code:0,data:{task:{task_id:'other_task',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(success.data)}}}});
     expect(await s.provider.poll('task_fixture','synthetic')).toMatchObject({status:'uncertain',taskId:'task_fixture',documentId:null});
   });
-  it.each(['javascript:alert(1)','http://tenant.feishu.cn/docx/doc_fixture','https://feishu.cn.evil.test/docx/doc_fixture','https://user:pass@tenant.feishu.cn/docx/doc_fixture','https://tenant.feishu.cn/docx/another','https://tenant.feishu.cn/docx/doc_fixture?token=value','https://tenant.feishu.cn/docx/doc_fixture#x'])('omits unsafe/unbound document URL %s',async url=>{
+  it.each(['javascript:alert(1)','http://tenant.feishu.cn/docx/doc_fixture','https://feishu.cn.evil.test/docx/doc_fixture','https://user:pass@tenant.feishu.cn/docx/doc_fixture','https://tenant.feishu.cn/docx/another','https://tenant.feishu.cn/docx/doc_fixture?token=value','https://tenant.feishu.cn/docx/doc_fixture#x','https://tenant.feishu.cn:8443/docx/doc_fixture'])('omits unsafe/unbound document URL %s',async url=>{
     const s=setup({code:0,data:{document:{...success.data.document,url}}});expect(await s.provider.create(input,'synthetic')).toMatchObject({status:'succeeded',url:null});
   });
   it('uses only the fixed matching Lark API origin and does not trust a Feishu-domain receipt URL for Lark',async()=>{

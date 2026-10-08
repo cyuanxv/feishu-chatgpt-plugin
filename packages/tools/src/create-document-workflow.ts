@@ -74,7 +74,7 @@ export class CreateDocumentWorkflow {
     return this.receipt(await this.store.finish(principal,intentId,this.outcome(intentId,outcome,true),current.task_id,'poll'),true);
   }
   private base(intentId: string,status: DocumentWriteReceipt['status'],reason: DocumentWriteReceipt['reason'],mayHaveCreated: boolean): DocumentWriteReceipt {
-    return { operation:'create_doc',status,intent_id:intentId,document_id:null,revision_id:null,url:null,reason,warnings_count:0,
+    return { operation:'create_doc',status,intent_id:intentId,document_id:null,revision_id:null,url:null,reason,warnings_count:0,warning_count_mode:'max_observed',
       may_have_created:mayHaveCreated,automatic_create_retry_allowed:false,content_verified:false,replayed:false,live_verified:false };
   }
   private outcome(intentId: string,outcome: DocumentCreateOutcome,replayed: boolean): DocumentWriteReceipt {

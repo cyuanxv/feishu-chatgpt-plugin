@@ -49,9 +49,18 @@ export class PostgresDocumentWriteStore {
   }
   async finish(principal: DocumentWritePrincipal, id: string, receipt: DocumentWriteReceipt, taskId: string | null, from: 'execution' | 'poll'): Promise<DocumentWriteIntent> {
     documentWriteReceipt.parse(receipt);
-    const expected = from === 'execution' ? ['executing'] : ['pending','uncertain'];
-    await this.query(`UPDATE document_write_intents SET status=$1,receipt=$2::jsonb,task_id=$3,updated_at=now()
-      WHERE id=$4 AND binding_hash=$5 AND status=ANY($6::text[]) RETURNING id`, [receipt.status,JSON.stringify(receipt),taskId,id,writeBinding(principal),expected]);
+    const expected = from === 'execution' ? ['executing'] : ['pending','uncertain','succeeded','partial','failed'];
+    // These are static SQL expressions, never caller-controlled SQL. Merge warning evidence in
+    // the same atomic UPDATE so a slower warned poll cannot be lost behind an earlier success.
+    const count = "GREATEST(COALESCE((receipt->>'warnings_count')::int,0),$7::int)";
+    const terminal = "status IN ('succeeded','partial','failed')";
+    const chosen = `CASE WHEN ${terminal} THEN receipt ELSE $2::jsonb END`;
+    const status = `CASE WHEN status IN ('succeeded','partial') AND ${count}>0 THEN 'partial' WHEN ${terminal} THEN status WHEN $1='succeeded' AND ${count}>0 THEN 'partial' ELSE $1 END`;
+    const reason = `CASE WHEN (${status})='partial' THEN 'provider_warning' WHEN ${terminal} THEN receipt->>'reason' ELSE ($2::jsonb)->>'reason' END`;
+    await this.query(`UPDATE document_write_intents SET status=(${status}),
+      receipt=jsonb_set(jsonb_set(jsonb_set((${chosen}),'{warnings_count}',to_jsonb(${count})),'{status}',to_jsonb((${status})::text)),'{reason}',to_jsonb((${reason})::text)),
+      task_id=$3,updated_at=now() WHERE id=$4 AND binding_hash=$5 AND status=ANY($6::text[]) RETURNING id`,
+    [receipt.status,JSON.stringify(receipt),taskId,id,writeBinding(principal),expected,receipt.warnings_count]);
     return this.get(principal,id);
   }
 }

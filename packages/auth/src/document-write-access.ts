@@ -45,6 +45,10 @@ export class PostgresDocumentWriteAccess implements DocumentWriteAccess {
     if (writeBinding(current) !== writeBinding(initial)) throw new DomainError('AUTH_REQUIRED', 'Write authorization changed. Review and confirm again.');
     let snapshot: Awaited<ReturnType<TokenStore['snapshot']>>;
     try { snapshot = await this.store.snapshot(current.identity); } catch { throw new DomainError('AUTH_REQUIRED', 'Linked credentials are unavailable.'); }
+    // Credential loading is asynchronous; an issuer can revoke the MCP grant while it runs.
+    // Recheck that grant after the snapshot, immediately before releasing the user credential.
+    const final = await this.authenticate(bearer);
+    if (writeBinding(final) !== writeBinding(initial)) throw new DomainError('AUTH_REQUIRED', 'Write authorization changed while loading credentials.');
     if (!snapshot || snapshot.revision.split(':')[0] !== current.generation || !snapshot.tokens.accessToken || !Number.isFinite(snapshot.tokens.expiresAt) || snapshot.tokens.expiresAt <= Date.now()) throw new DomainError('AUTH_REQUIRED', 'Linked authorization expired or changed.');
     return snapshot.tokens;
   }

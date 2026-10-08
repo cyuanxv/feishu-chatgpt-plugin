@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { PostgresDocumentWriteStore } from '../packages/policy/src/document-write-store.js';
 import { demoIdentity } from '../packages/feishu/src/fixtures.js';
 import { documentRequestHash } from '../packages/schemas/src/document-write.js';
+import type { DocumentWriteReceipt } from '../packages/schemas/src/document-write.js';
 
 // Only the existing ephemeral synthetic CI service. Never reads operator database settings.
 describe.skipIf(process.env.GITHUB_ACTIONS!=='true'||process.env.FEISHU_CI_POSTGRES!=='1')('native PostgreSQL document-write idempotency',()=>{
@@ -39,5 +40,12 @@ describe.skipIf(process.env.GITHUB_ACTIONS!=='true'||process.env.FEISHU_CI_POSTG
     const other=documentRequestHash({title:'Different',markdown:'Synthetic text'});
     const results=await Promise.allSettled([store.prepare(principal,hash,'collision_fixture'),store.prepare(principal,other,'collision_fixture')]);
     expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);expect((await pool.query('SELECT count(*)::int AS n FROM document_write_intents')).rows[0].n).toBe(1);
+  });
+  it('retains late warning evidence atomically without losing a successful document receipt',async()=>{
+    const row=await store.prepare(principal,hash,'warnings_fixture');await store.confirm(principal,row.id,'approve');await store.claim(principal,row.id);
+    const receipt=(status:'pending'|'succeeded',warnings:number):DocumentWriteReceipt=>({operation:'create_doc',status,intent_id:row.id,document_id:status==='succeeded'?'doc_fixture':null,revision_id:status==='succeeded'?1:null,url:null,reason:status==='succeeded'?'provider_created':'provider_processing',warnings_count:warnings,warning_count_mode:'max_observed',may_have_created:true,automatic_create_retry_allowed:false,content_verified:false,replayed:false,live_verified:false});
+    await store.finish(principal,row.id,receipt('pending',0),'task_fixture','execution');
+    await Promise.all([store.finish(principal,row.id,receipt('succeeded',0),'task_fixture','poll'),store.finish(principal,row.id,receipt('pending',3),'task_fixture','poll')]);
+    const final=await store.get(principal,row.id);expect(final.status).toBe('partial');expect(final.receipt).toMatchObject({status:'partial',document_id:'doc_fixture',revision_id:1,warnings_count:3});
   });
 });
