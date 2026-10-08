@@ -38,3 +38,7 @@ The accepted PRD enumerates **30 tools**, despite its “29 tools” heading. Al
 Logical scopes are internal application capabilities, not actual Feishu Open Platform permission names. A live scope mapper is not implemented. The profile and search scopes alone never grant document/message/calendar/task content.
 
 Tool outputs are structured validated envelopes. The current output schema validates envelope integrity and JSON data; domain-specific output schemas and live provider contract fixtures remain future hardening work. All source bodies are untrusted data.
+
+## Provider message-search filters (dev.10)
+
+The internal provider `search` workflow accepts `owner`, `chat_id` and `time_range` only with explicit `types: ["message"]`. `owner` means sender open ID, not document creator. The time window must use whole-second boundaries (including `.000Z`); fractional-second bounds are rejected rather than silently rounded. The accepted window is serialized into the existing IM search API in Unix seconds. Provider-side boundary inclusion and returned timestamp units remain unverified against a real tenant. Queries remain offset-aware and bounded to 366 days; no new endpoint or permission is used. Filtered cursors bind all three constraints, query, page size, selected domains, connection and scope set. Unsupported mixed-domain filters fail before transport. These behaviors are tested with injected synthetic transport, not a real account. The HTTP listener remains synthetic.

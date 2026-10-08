@@ -2,7 +2,7 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.9`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.10`
 
 ## Current safety boundary
 
@@ -65,6 +65,8 @@ The provider slices add 30 bounded provider read bindings, targeted domain adapt
 These modules are **not wired into the demo MCP listener**. They have not contacted Feishu or exchanged real credentials. See [provider integration status](docs/provider-integration.md) for exact endpoint coverage and incomplete features.
 
 The current orchestration also connects explicit Base searches to metadata-only fetch, traverses visible calendars with explicit continuation, and rejects thread cursor loops or incomplete pages. Agenda ordering is per calendar/provider, not a claim of global chronological sorting. Missing calendar access stays visible as partial coverage.
+
+The unified provider search now supports owner (sender open ID), chat and time filters for explicit message-only searches. These filters are passed to the existing IM endpoint and bound to every continuation; mixed document/Base filters fail explicitly rather than being dropped. Message search pages reject missing or malformed pagination, oversized pages and duplicate or invalid message IDs.
 
 An internal `ProviderReadRouter` now routes all 17 reads through the shared input/policy/audit/envelope boundary. Tests drive every route through the installed SDK's injected transport and reject all 13 writes. It remains unreferenced by the HTTP server. Its supplied caller context is **not a bearer-token authenticator**, and `live_verified` is always false. See [the connection checklist](docs/next-steps.md) before any real setup.
 

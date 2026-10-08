@@ -5,7 +5,7 @@ import { DomainError, digest, RateLimiter, requireScope, type Identity } from '.
 import { auditEvent, silentAudit, type AuditSink } from '../../observability/src/audit.js';
 import type { FeishuProviderReads } from '../../feishu/src/provider-reads.js';
 import type { FeishuProviderDomains } from '../../feishu/src/provider-domains.js';
-import type { FeishuProviderWorkflows } from '../../feishu/src/provider-workflows.js';
+import { assertSupportedSearchFilters, type FeishuProviderWorkflows } from '../../feishu/src/provider-workflows.js';
 import type { FeishuProviderBases } from '../../feishu/src/provider-bases.js';
 import type { FeishuProviderTasks } from '../../feishu/src/provider-tasks.js';
 
@@ -51,7 +51,7 @@ export class ProviderReadRouter {
       let data:object;
       switch(tool){
         case 'get_profile':data=await this.services.reads.profile(identity);break;
-        case 'search':{const args=inputSchemas.search.parse(input);if(args.owner||args.time_range||args.chat_id)throw new DomainError('UNSUPPORTED_CAPABILITY','Unified provider search does not yet support owner/time/chat filters. Use the targeted message search when applicable.');budget(args.page_size,20);chars(args.query,30);const {owner:_owner,time_range:_range,chat_id:_chat,...supported}=args;data=await this.services.workflows.search(identity,supported);break;}
+        case 'search':{const args=inputSchemas.search.parse(input);assertSupportedSearchFilters(args);budget(args.page_size,20);chars(args.query,30);data=await this.services.workflows.search(identity,args);break;}
         case 'fetch':data=await this.services.workflows.fetch(identity,inputSchemas.fetch.parse(input));break;
         case 'search_people':{const args=inputSchemas.search_people.parse(input);if(args.cursor)throw new DomainError('UNSUPPORTED_CAPABILITY','People search requires refining the query instead of cursor pagination.');budget(args.page_size,30);chars(args.query,50);data=await this.services.reads.people(identity,{query:args.query,page_size:args.page_size});break;}
         case 'list_chats':{const args=inputSchemas.list_chats.parse(input);data=await this.services.reads.chats(identity,args.query,{page_size:args.page_size,cursor:args.cursor});break;}

@@ -1,8 +1,12 @@
 # Validation record
 
+## Tenth slice, filtered unified message search
+
+Version `0.1.0-dev.10` passes 416 automated tests across seventeen files, strict typecheck, build and source allowlist checks in the authorized cloud workspace. Forty-seven new cases exercise the complete router, workflow and installed official SDK with injected synthetic transport: sender/chat/time forwarding, signed filter-bound cursors, empty nonterminal pages, changed identity/scopes/query, unsupported mixed domains, invalid dates, scope refusal, provider result mismatch and malformed/oversized pages. Independent review found a subsecond filter collapsing into equal Unix-second bounds. The correction rejects fractional boundaries before SDK dispatch at all provider entry points, with regression tests and an accepted `.000Z` case. No credentials, live provider data, OAuth grants or private deployment were used or changed. Independent review and exact public-commit CI are recorded separately when completed.
+
 ## Ninth slice, finite provider routing seam
 
-Version `0.1.0-dev.9` has **369 passing automated tests across sixteen files**, before independent review. Thirty-nine new tests cover all seventeen routes, all thirteen write denials, actual SDK injected-transport calls, out-of-band context validation, audience/session/expiry checks, source/ref isolation, metadata-only logs, rate/output budgets, unsupported-filter rejection, Base ref/paging and capacity-only room metadata. The synthetic server retains its existing HTTP/MCP tests and live-mode refusal. A structurally valid supplied context is not proof of real authentication; production middleware and provider grant verification are absent.
+Version `0.1.0-dev.9` has **369 passing automated tests across sixteen files**, before independent review. Forty-seven new tests cover all seventeen routes, all thirteen write denials, actual SDK injected-transport calls, out-of-band context validation, audience/session/expiry checks, source/ref isolation, metadata-only logs, rate/output budgets, unsupported-filter rejection, Base ref/paging and capacity-only room metadata. The synthetic server retains its existing HTTP/MCP tests and live-mode refusal. A structurally valid supplied context is not proof of real authentication; production middleware and provider grant verification are absent.
 
 ## Eighth slice, read-flow orchestration
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-dev.10
+
+- Add unified provider message search with explicit sender, chat and time filters through the existing SDK endpoint.
+- Bind all filters to continuation and refuse unsupported mixed-domain filtering without silently narrowing scope.
+- Reject malformed, oversized, duplicate-ID and invalid-ID message search pages.
+- Add 47 synthetic contract and negative tests across complete router-to-SDK calls, query binding, scope checks and pagination.
+- Keep production OAuth, live HTTP, real provider access and all thirteen writes disabled.
+
 ## 0.1.0-dev.9
 
 - Added an inert finite router for all seventeen provider reads, reusing shared input schemas, scope policy, rate limits, audit and envelope validation
