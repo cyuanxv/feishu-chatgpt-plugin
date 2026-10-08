@@ -1,6 +1,6 @@
 {
   "name": "feishu-chatgpt-plugin",
-  "version": "0.1.0-dev.13",
+  "version": "0.1.0-dev.14",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-ui-assets.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run tests/",
     "dev": "tsx apps/mcp-server/src/main.ts",
@@ -17,7 +17,8 @@
     "check:source": "node scripts/check-source.mjs",
     "start:provider": "node dist/apps/mcp-server/src/main-provider.js",
     "smoke:production": "node scripts/smoke-production.mjs",
-    "start:issuer": "node dist/apps/mcp-server/src/main-issuer.js"
+    "start:issuer": "node dist/apps/mcp-server/src/main-issuer.js",
+    "start:document-review": "node dist/apps/mcp-server/src/main-document-review.js"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.74.0",

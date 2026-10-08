@@ -22,6 +22,12 @@ export class PostgresDocumentWriteAccess implements DocumentWriteAccess {
   }
   async authenticate(bearer: string): Promise<DocumentWritePrincipal> {
     if (!/^[A-Za-z0-9_-]{43,512}$/.test(bearer)) throw new DomainError('AUTH_REQUIRED', 'Valid write authorization is required.');
+    return this.authenticateStoredTokenHash(digest(bearer));
+  }
+  /** Only a server-side session adapter may supply a hash read from a trusted session record.
+   * Never expose this method as an endpoint accepting client-asserted token hashes. */
+  protected async authenticateStoredTokenHash(tokenHash: string): Promise<DocumentWritePrincipal> {
+    if (!/^[a-f0-9]{64}$/.test(tokenHash)) throw new DomainError('AUTH_REQUIRED', 'Valid write authorization is required.');
     let rows: unknown[];
     try {
       rows = (await this.db.query(`SELECT c.id AS connection_id,c.subject,c.tenant_id,c.domain,g.id AS grant_id,
@@ -31,7 +37,7 @@ export class PostgresDocumentWriteAccess implements DocumentWriteAccess {
         JOIN feishu_connections c ON c.id=g.connection_id AND c.subject=g.subject
         WHERE t.token_hash=$1 AND g.resource=$2 AND t.expires_at>now() AND t.revoked_at IS NULL
           AND g.revoked_at IS NULL AND c.status='active' AND t.grant_generation=c.grant_generation
-          AND g.scopes<@c.scopes`, [digest(bearer), this.resource])).rows;
+          AND g.scopes<@c.scopes`, [tokenHash, this.resource])).rows;
     } catch { throw new DomainError('UPSTREAM_ERROR', 'Write authorization storage is unavailable.'); }
     const parsed = rows.length === 1 ? rowSchema.safeParse(rows[0]) : null;
     if (!parsed?.success || parsed.data.expires_ms <= Date.now()) throw new DomainError('AUTH_REQUIRED', 'Valid write authorization is required.');

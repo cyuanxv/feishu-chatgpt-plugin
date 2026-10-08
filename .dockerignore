@@ -11,3 +11,5 @@
 !infra/migrations/
 !infra/migrations/**
 !Dockerfile
+!scripts/
+!scripts/copy-ui-assets.mjs

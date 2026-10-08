@@ -5,6 +5,7 @@ RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY apps ./apps
 COPY packages ./packages
+COPY scripts/copy-ui-assets.mjs ./scripts/copy-ui-assets.mjs
 RUN npm run build
 
 FROM node:24-bookworm-slim AS dependencies

@@ -1,0 +1,27 @@
+import { beforeAll,beforeEach,afterAll,describe,it,expect } from 'vitest';
+import { randomUUID,randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { Pool } from 'pg';
+import { PostgresDocumentWriteStore } from '../packages/policy/src/document-write-store.js';
+import { PostgresDocumentReviewSessions } from '../packages/auth/src/document-review-session.js';
+import { demoIdentity } from '../packages/feishu/src/fixtures.js';
+import { documentRequestHash } from '../packages/schemas/src/document-write.js';
+import { digest } from '../packages/policy/src/core.js';
+// Only the synthetic CI PostgreSQL service. Never read ambient database or account configuration.
+describe.skipIf(process.env.GITHUB_ACTIONS!=='true'||process.env.FEISHU_CI_POSTGRES!=='1')('native PostgreSQL browser review race fences',()=>{
+ const schema='review_fixture_'+randomUUID().replaceAll('-','');
+ const config={host:'127.0.0.1',port:5432,user:'synthetic_ci',password:'synthetic_ci',database:'feishu_ci',connectionTimeoutMillis:5000,query_timeout:10000,statement_timeout:10000};
+ let admin:Pool,pool:Pool,store:PostgresDocumentWriteStore,sessions:PostgresDocumentReviewSessions;
+ const identity={...demoIdentity(),scopes:['docs.write']},resource='https://mcp.example.test/mcp',bearer='D'.repeat(43);
+ const principal={identity,grantId:'fixture_grant',generation:'1',clientId:'fixture_host',resource};
+ const hash=documentRequestHash({title:'Synthetic',markdown:'Synthetic body'});
+ beforeAll(async()=>{admin=new Pool({...config,max:1});await admin.query(`CREATE SCHEMA ${schema}`);pool=new Pool({...config,max:8,options:`-c search_path=${schema}`});for(const name of ['001_connections.sql','002_oauth_link_attempts.sql','003_resource_access.sql','004_mcp_issuer.sql','005_document_write_intents.sql','006_document_review_sessions.sql'])await pool.query(await readFile(new URL('../infra/migrations/'+name,import.meta.url),'utf8'));store=new PostgresDocumentWriteStore(pool);sessions=new PostgresDocumentReviewSessions(pool,'https://review.example.test');});
+ beforeEach(async()=>{await pool.query('TRUNCATE feishu_connections CASCADE');await pool.query("INSERT INTO feishu_connections(id,subject,tenant_id,domain,open_id,scopes,provider_scopes,status) VALUES($1,$2,$3,$4,'ou_fixture',ARRAY['docs.write'],ARRAY['docx:document:create'],'active')",[identity.connectionId,identity.subject,identity.tenantId,identity.domain]);await pool.query("INSERT INTO oauth_grants(id,subject,connection_id,scopes,resource,client_id) VALUES('fixture_grant',$1,$2,ARRAY['docs.write'],$3,'fixture_host')",[identity.subject,identity.connectionId,resource]);await pool.query("INSERT INTO mcp_access_tokens(token_hash,grant_id,grant_generation,expires_at) VALUES($1,'fixture_grant',1,now()+interval '1 hour')",[digest(bearer)]);});
+ afterAll(async()=>{await pool?.end();if(admin){await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}});
+ async function open(id:string,nonce=digest(randomBytes(32).toString('hex'))){return sessions.open(bearer,principal,id,hash,nonce);}
+ it('consumes one handoff nonce atomically across independent connections',async()=>{const i=await store.prepare(principal,hash,'nonce_fixture'),nonce=digest('synthetic_nonce');const results=await Promise.allSettled(Array.from({length:8},()=>open(i.id,nonce)));expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect((await pool.query('SELECT count(*)::int n FROM document_review_sessions')).rows[0].n).toBe(1);});
+ it('allows exactly one submitting transition for repeated clicks in one session',async()=>{const i=await store.prepare(principal,hash,'click_fixture'),s=await open(i.id);const results=await Promise.all(Array.from({length:8},()=>sessions.claim(s.session,s.csrf)));expect(results.filter(Boolean)).toHaveLength(1);});
+ it('cancellation acknowledgement excludes an execution claim even from another browser session',async()=>{for(let n=0;n<12;n++){const i=await store.prepare(principal,hash,'race_fixture_'+n),a=await open(i.id),b=await open(i.id);await sessions.claim(a.session,a.csrf);await store.confirm(principal,i.id,'approve');const [claimed,cancelled]=await Promise.all([store.claim(principal,i.id),sessions.cancel(b.session,b.csrf,principal)]);expect(claimed&&cancelled).toBe(false);expect((await store.get(principal,i.id)).status).toBe(claimed?'executing':'cancelled');}});
+ it('same-session close/confirm race cannot acknowledge cancellation and execute',async()=>{for(let n=0;n<12;n++){const i=await store.prepare(principal,hash,'same_fixture_'+n),s=await open(i.id);const [submitted,cancelled]=await Promise.all([sessions.claim(s.session,s.csrf),sessions.cancel(s.session,s.csrf,principal)]);let executed=false;if(submitted){try{await store.confirm(principal,i.id,'approve');executed=await store.claim(principal,i.id);}catch{}}expect(cancelled&&executed).toBe(false);if(cancelled)expect((await store.get(principal,i.id)).status).toBe('cancelled');}});
+ it('no session cancellation can clear an executing reservation after a restart',async()=>{const i=await store.prepare(principal,hash,'restart_fixture'),a=await open(i.id),b=await open(i.id);await sessions.claim(a.session,a.csrf);await store.confirm(principal,i.id,'approve');await store.claim(principal,i.id);const restarted=new PostgresDocumentReviewSessions(pool,'https://review.example.test');expect(await restarted.cancel(b.session,b.csrf,principal)).toBe(false);expect((await store.get(principal,i.id)).status).toBe('executing');});
+});
