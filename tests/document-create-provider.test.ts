@@ -53,6 +53,18 @@ describe('bounded official-CLI document create wire contract',()=>{
     const s=setup({code:0,data:{warnings:'malformed',task:{task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(success.data)}}}});
     expect(await s.provider.create(input,'synthetic')).toMatchObject({status:'uncertain',taskId:'task_fixture',documentId:null});
   });
+  it.each([
+    [{document:{document_id:'doc_fixture',revision_id:'malformed'},warnings:['retained']},'uncertain'],
+    [{result:'failed',warnings:['retained']},'failed'],
+    [{warnings:['retained']},'uncertain'],
+  ] as const)('retains bounded inner warnings even when document validation fails %s',async(result,status)=>{
+    const s=setup({code:0,data:{task:{task_id:'task_fixture',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(result)}}}});
+    expect(await s.provider.poll('task_fixture','synthetic')).toMatchObject({status,warningCount:1,taskId:'task_fixture'});
+  });
+  it('retains outer warnings on contradictory task envelopes too',async()=>{
+    const s=setup({code:0,data:{result:'failed',warnings:['retained'],task:{task_id:'task_fixture',type:'create_document',status:'processing'}}});
+    expect(await s.provider.create(input,'synthetic')).toMatchObject({status:'uncertain',warningCount:1,taskId:'task_fixture'});
+  });
   it('rejects a polled task substitution without adopting its task ID',async()=>{
     const s=setup({code:0,data:{task:{task_id:'other_task',type:'create_document',status:'succeeded',result:{create_document:JSON.stringify(success.data)}}}});
     expect(await s.provider.poll('task_fixture','synthetic')).toMatchObject({status:'uncertain',taskId:'task_fixture',documentId:null});

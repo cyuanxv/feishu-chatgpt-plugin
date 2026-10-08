@@ -174,6 +174,11 @@ describe('default-off, durable document creation candidate',()=>{
     await s.w.execute(bearer,s.id,input);expect((await s.w.getReceipt(bearer,s.id,true)).warnings_count).toBe(2);
     expect(await s.w.getReceipt(bearer,s.id,true)).toMatchObject({status:'partial',warnings_count:2});
   });
+  it('keeps warnings from a malformed inner result when a later status read is valid',async()=>{
+    transport.mockResolvedValueOnce(task('succeeded',{result:{create_document:JSON.stringify({document:{document_id:'doc_created',revision_id:'bad'},warnings:['initial warning']})}})).mockResolvedValueOnce(asyncDone());
+    const s=await approved();expect(await s.w.execute(bearer,s.id,input)).toMatchObject({status:'uncertain',warnings_count:1});
+    expect(await s.w.getReceipt(bearer,s.id,true)).toMatchObject({status:'partial',document_id:'doc_created',warnings_count:1});
+  });
   it.each(["UPDATE oauth_grants SET revoked_at=now()","UPDATE feishu_connections SET grant_generation=2","UPDATE feishu_connections SET provider_scopes='{}'","UPDATE feishu_connections SET status='revoked'"])('rechecks current grants before a confirmed write %s',async sql=>{
     const s=await approved();await db.exec(sql);await expect(s.w.execute(bearer,s.id,input)).rejects.toThrow();expect(transport).not.toHaveBeenCalled();
   });
