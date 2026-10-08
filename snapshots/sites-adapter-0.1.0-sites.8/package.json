@@ -1,0 +1,32 @@
+{
+  "name": "feishu-sites-agenda",
+  "version": "0.1.0-sites.8",
+  "private": true,
+  "type": "module",
+  "description": "Private Sites single-agenda Feishu connector candidate",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "db:generate": "drizzle-kit generate",
+    "check:workerd": "node scripts/check-workerd.mjs",
+    "check:package": "node scripts/check-package.mjs",
+    "check:source": "node scripts/check-source.mjs",
+    "check:oauth-wire": "node scripts/check-oauth-wire.mjs",
+    "check:form-http": "node scripts/check-form-http.mjs"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.11",
+    "drizzle-orm": "0.45.3",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.9",
+    "typescript": "7.0.2",
+    "@types/node": "26.6.4",
+    "@modelcontextprotocol/sdk": "1.32.1"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "license": "MIT",
+  "author": "cyuanxv"
+}
