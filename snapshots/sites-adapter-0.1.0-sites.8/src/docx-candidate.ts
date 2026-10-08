@@ -78,12 +78,14 @@ export interface DocxGrant {
   grant: string;
   scopes: readonly string[];
   token: string;
+  revision?: number;
 }
 // Integrators must resolve trusted principal + current grant on every call, and fence
 // disconnect/relink races when expectedGrant is supplied. No token storage here.
 export type DocxAccess = (
   principal: Principal,
   expectedGrant?: string,
+  requiredScope?: string,
 ) => Promise<DocxGrant>;
 export class DocxCandidateProvider {
   // Deliberately no global fetch default. Tests supply an intercepted transport.
@@ -178,7 +180,7 @@ export class DocxCandidate {
     operation: keyof typeof DOCX_CANDIDATE_SCOPES,
     grant?: string,
   ) {
-    const auth = await this.access(p, grant);
+    const auth = await this.access(p, grant, DOCX_CANDIDATE_SCOPES[operation]);
     assert(!grant || auth.grant === grant, "connection_changed", 401);
     assert(
       auth.scopes.includes(DOCX_CANDIDATE_SCOPES[operation]),
@@ -188,7 +190,12 @@ export class DocxCandidate {
     return auth;
   }
   private async scopeHash(auth: DocxGrant) {
-    return hash(JSON.stringify([...new Set(auth.scopes)].sort()));
+    return hash(
+      JSON.stringify({
+        scopes: [...new Set(auth.scopes)].sort(),
+        revision: auth.revision ?? null,
+      }),
+    );
   }
   private async seal(
     value: unknown,
@@ -314,6 +321,11 @@ export class DocxCandidate {
       );
     }
     const current = await this.auth(p, "search", auth.grant);
+    assert(
+      current.revision === auth.revision,
+      "docx_state_changed_restart",
+      409,
+    );
     assert((await this.scopeHash(current)) === scopes, "scope_changed", 401);
     return this.output({
       results,
@@ -390,6 +402,11 @@ export class DocxCandidate {
         )
       : null;
     const current = await this.auth(p, "fetch", auth.grant);
+    assert(
+      current.revision === auth.revision,
+      "docx_state_changed_restart",
+      409,
+    );
     assert((await this.scopeHash(current)) === scopes, "scope_changed", 401);
     return this.output({
       type: "docx",

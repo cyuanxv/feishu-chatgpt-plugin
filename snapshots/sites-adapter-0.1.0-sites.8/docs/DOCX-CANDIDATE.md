@@ -59,8 +59,10 @@ candidate uses fixed fetch-compatible HTTP and the existing Workers WebCrypto Va
 
 The module itself does not implement a verified live-enable gate. Its current safety
 boundary is exclusion from production imports/registration and unchanged production
-scopes, plus mandatory test-supplied transport. Tests cannot establish production
-database fencing atomicity.
+scopes, plus mandatory test-supplied transport. Temporary native-D1 tests exercise the real asynchronous adapter; see
+[DOCX/D1 integration](DOCX-D1-INTEGRATION.md) for its authorization linearization
+boundary and conservative token-refresh reference invalidation. These tests do not
+establish atomic response delivery against future database writes.
 
 Before live integration: verify the exact raw-content endpoint, minimum scope and
 user-token behavior for the target app;
@@ -77,9 +79,15 @@ No Wiki, IM, Base, write tools, new credentials or deployment are part of this c
 Run from this snapshot directory:
 
 - `npm run typecheck`
-- `npm test` (206 passing: 169 baseline and 37 candidate regressions)
+- `npm test` (211 passing: 169 baseline and 42 candidate regressions)
 - `node scripts/check-docx-workerd.mjs` (nine native Workers checks)
+- `node scripts/check-docx-d1-workerd.mjs` (18 real Workers/temporary-D1 checks)
 - Existing package/source, workerd, OAuth-wire and native-HTTP checks
 
 The production Worker bundle must remain byte-for-byte identical to the frozen sites.9
 bundle. Candidate exports occur only in the test entrypoint. No live provider requests.
+
+The current D1 bridge specifically reuses calendar Linking and therefore additionally
+requires its existing calendar/offline scopes. DOCX-only grants are unsupported by this
+bridge and fail before provider access. Do not infer independent minimum-scope consent
+support from the standalone provider scope evidence.
