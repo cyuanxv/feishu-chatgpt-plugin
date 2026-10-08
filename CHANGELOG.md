@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.13
+
+- Add an unmounted, default-off create_doc workflow with typed text-only Markdown preview, trusted-host confirmation, durable idempotency and receipts.
+- Verify separate docs.write and actual provider permission without expanding existing OAuth grants.
+- Use fixed official-CLI-backed create/status endpoints through the official SDK; never automatically repeat a create POST.
+- Persist hashes and bounded receipts, preserve uncertainty across restarts/storage failures, and prevent late polling responses from regressing success.
+- Add synthetic provider/workflow regressions and five native PostgreSQL concurrency cases.
+- Keep all existing live entrypoints and thirteen public writes disabled; actual provider/confirmation UI acceptance remains unverified.
+
 ## 0.1.0-dev.12
 
 - Integrate the previously reviewed default-disabled agenda HTTP/OAuth candidates with the message-search filter branch while preserving both histories.

@@ -2,7 +2,7 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.12`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.13`
 
 ## Current safety boundary
 
@@ -70,6 +70,10 @@ These modules are **not wired into the demo MCP listener**. They have not contac
 The current orchestration also connects explicit Base searches to metadata-only fetch, traverses visible calendars with explicit continuation, and rejects thread cursor loops or incomplete pages. Agenda ordering is per calendar/provider, not a claim of global chronological sorting. Missing calendar access stays visible as partial coverage.
 
 The `ProviderReadRouter` routes all 17 reads through the shared input/policy/audit/envelope boundary. The mock server does not import it. The new `agenda-server` candidate exposes only `get_agenda` after verifying an opaque Bearer token against persisted grants and account generations, checking actual calendar permissions and loading the linked encrypted user token. Tests use synthetic grants in PGlite and the actual SDK with injected transport. dev11 adds a separate Feishu browser-login/consent and durable OAuth issuer candidate. Its end-to-end test obtains grants through the actual candidate flow using injected synthetic Feishu responses, without SQL-seeding identities or MCP tokens. This is still offline evidence, not a production login or tenant acceptance result. See [issuer candidate](docs/agenda-issuer-candidate.md). `live_verified` remains false. See [the exact integration boundary](docs/agenda-resource-candidate.md).
+
+## Document-create candidate
+
+A separate default-off `create_doc` workflow now implements full-content preview, trusted-host confirmation attestation, durable local at-most-once execution and async receipts using the pinned official CLI protocol. It does not register a live write tool or expand current OAuth scopes. Ambiguous POST results are never recreated automatically; warning-bearing documents remain partial and content is not read-back verified. See [the precise contract and remaining activation gates](docs/document-create-candidate.md). The twelve other planned writes are unaffected.
 
 ## Next verified milestones
 

@@ -1,5 +1,9 @@
 # Validation record
 
+## Thirteenth slice, default-off document creation
+
+The candidate adds end-to-end synthetic tests through real PostgreSQL-compatible SQL and the installed official SDK injected transport. Preview makes no provider request; signed trusted-host approval binds exact content, destination and current authorization; an atomic durable claim permits at most one POST; uncertain results are never retried as creates. Async status reads preserve pending/uncertain state and cannot regress successful receipts. Native PostgreSQL adds five concurrency cases to the existing five issuer cases, run only in the ephemeral CI service. Full counts, independent review and exact-commit CI are recorded in the PR. No write scope, real credentials, user data, hosting or existing runtime configuration was changed.
+
 ## Twelfth slice, reviewed read-only branch integration
 
 Version `0.1.0-dev.12` combines the default-disabled agenda HTTP/issuer candidates from PRs 6–7 with the message-search filters from PR 8. The combined source preserves both histories; no live configuration, OAuth grant, credentials, private data or deployment is included.
