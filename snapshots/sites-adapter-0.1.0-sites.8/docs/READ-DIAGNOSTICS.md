@@ -1,4 +1,4 @@
-# Read failure diagnostics candidate
+# 0.1.0-sites.9 read failure diagnostics candidate
 
 This independent, unpublished change fixes lost diagnostic evidence when the user-info,
 calendar-list, or calendar-instance API returns an error envelope with HTTP 200.
@@ -17,7 +17,7 @@ The correlation ID is local; it is not a provider request ID.
 ## Offline validation
 
 - TypeScript check: passed.
-- Unit/integration suite: 168 passed, including 7 new diagnostic regressions.
+- Unit/integration suite: 169 passed, including 7 diagnostic regressions and a version-consistency regression.
 - Package validation and source-pattern scan: passed.
 - Official Miniflare/workerd + D1 harness: 18 checks passed.
 - OAuth wire harness with synthetic provider: 13 checks passed.
@@ -27,3 +27,7 @@ The correlation ID is local; it is not a provider request ID.
 Not run: real Feishu OAuth, production deployment, Sites dispatcher verification,
 production migration, or browser-based live acceptance. Existing real OAuth error 20049
 remains unresolved; this change is diagnostic hardening, not a claim to repair OAuth.
+
+Package, lockfile, OAuth diagnostic source version, and MCP initialize metadata identify
+0.1.0-sites.9. Provider endpoints, scopes, hosting bindings, schemas, and runtime settings
+are unchanged. No new credentials or permissions are needed by this code change.

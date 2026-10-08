@@ -4,7 +4,7 @@ export const AUTHORIZE_ENDPOINT =
   "https://accounts.feishu.cn/open-apis/authen/v1/authorize";
 export const TOKEN_ENDPOINT = "https://accounts.feishu.cn/oauth/v3/token";
 export const TOKEN_CONTENT_TYPE = "application/x-www-form-urlencoded";
-export const OAUTH_SOURCE_VERSION = "0.1.0-sites.8";
+export const OAUTH_SOURCE_VERSION = "0.1.0-sites.9";
 export interface OAuthBinding {
   clientId: string;
   redirectUri: string;

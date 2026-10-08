@@ -40,3 +40,25 @@ test("changing upstream scope state before traversal fails without returning sou
   assert.equal(result.result.isError, true);
   assert.equal(result.result.structuredContent.error, "provider_scope_changed");
 });
+test("MCP initialization version matches package and diagnostic release version", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { OAUTH_SOURCE_VERSION } = await import("../.test-build/module.mjs");
+  const s = await setup();
+  const reply = await (
+    await s.send("/mcp", {
+      method: "POST",
+      user: null,
+      body: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-11-25" },
+      },
+    })
+  ).json();
+  assert.equal(reply.result.serverInfo.version, OAUTH_SOURCE_VERSION);
+  assert.equal(
+    OAUTH_SOURCE_VERSION,
+    JSON.parse(readFileSync("package.json", "utf8")).version,
+  );
+});

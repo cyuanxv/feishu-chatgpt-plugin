@@ -185,7 +185,7 @@ export function createWorker(
                 capabilities: { tools: {} },
                 serverInfo: {
                   name: "feishu-sites-agenda",
-                  version: "0.1.0-sites.5",
+                  version: OAUTH_SOURCE_VERSION,
                 },
               },
             });

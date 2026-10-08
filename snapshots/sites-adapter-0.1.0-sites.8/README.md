@@ -1,6 +1,6 @@
-# Feishu Sites adapter: read-diagnostics candidate
+# Feishu Sites adapter: 0.1.0-sites.9 candidate
 
-This branch is an unpublished follow-on candidate adding safe read-error diagnostics and MCP correlation receipts. The directory name is the historical snapshot path, not a newly deployed release. See [candidate validation](docs/READ-DIAGNOSTICS.md). No real-account OAuth success or fix for error 20049 is claimed.
+This branch is the unpublished 0.1.0-sites.9 follow-on candidate adding safe read-error diagnostics and MCP correlation receipts. The directory name is the historical snapshot path, not a newly deployed release. See [candidate validation](docs/READ-DIAGNOSTICS.md). No real-account OAuth success or fix for error 20049 is claimed.
 
 This directory preserves the standalone TypeScript/Cloudflare Workers adapter at package version **0.1.0-sites.8**. It is separate from the repository's Node/PostgreSQL implementation and is not wired into the root build or deployment.
 
@@ -43,4 +43,5 @@ The hosting manifest contains only logical D1/MCP configuration, without a regis
 See [handoff](docs/HANDOFF.md), [security](docs/SECURITY.md), [contracts](docs/CONTRACTS.md) and [validation](docs/VALIDATION.md). `SNAPSHOT-MANIFEST.sha256` covers all shipped files except itself.
 
 This preservation branch requires separate integration review and normal repository CI before any merge or deployment. Publishing source does not activate the adapter or provision a Site. MIT attribution is preserved.
+
 
