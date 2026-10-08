@@ -19,10 +19,10 @@ export interface DocumentWritePrincipal {
   clientId: string;
   resource: string;
 }
-export const writeBinding = (principal: DocumentWritePrincipal): string => digest(JSON.stringify({
+export const writeBinding = (principal: DocumentWritePrincipal, operation: 'create_doc' | 'create_task' = 'create_doc'): string => digest(JSON.stringify({
   subject: principal.identity.subject, tenant: principal.identity.tenantId, connection: principal.identity.connectionId,
   domain: principal.identity.domain, grant: principal.grantId, generation: principal.generation,
-  client: principal.clientId, resource: principal.resource, operation: 'create_doc',
+  client: principal.clientId, resource: principal.resource, operation,
 }));
 export const documentRequestHash = (input: CreateDocumentInput): string => digest(JSON.stringify({
   title: input.title, markdown: input.markdown, folder_token: input.folder_token ?? null,

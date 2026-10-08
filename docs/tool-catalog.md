@@ -31,7 +31,7 @@ The accepted PRD enumerates **30 tools**, despite its “29 tools” heading. Al
 | create_event | M17 | Not enabled | Not registered; rejection test |
 | update_event | M17 | Not enabled | Not registered; rejection test |
 | respond_event | M17 / P1 | Not enabled | Not registered; rejection test |
-| create_task | M18 | Not enabled | Not registered; rejection test |
+| create_task | M18 | Not enabled | Default-off unassigned-task preview/confirmation/idempotency/receipt candidate; not registered |
 | update_task | M18 | Not enabled | Not registered; rejection test |
 | complete_task | M18 | Not enabled | Not registered; rejection test |
 
@@ -44,3 +44,5 @@ Tool outputs are structured validated envelopes. The current output schema valid
 The internal provider `search` workflow accepts `owner`, `chat_id` and `time_range` only with explicit `types: ["message"]`. `owner` means sender open ID, not document creator. The time window must use whole-second boundaries (including `.000Z`); fractional-second bounds are rejected rather than silently rounded. The accepted window is serialized into the existing IM search API in Unix seconds. Provider-side boundary inclusion and returned timestamp units remain unverified against a real tenant. Queries remain offset-aware and bounded to 366 days; no new endpoint or permission is used. Filtered cursors bind all three constraints, query, page size, selected domains, connection and scope set. Unsupported mixed-domain filters fail before transport. These behaviors are tested with injected synthetic transport, not a real account. The HTTP listener remains synthetic.
 
 The dev.13 document-create candidate implements one write workflow offline; it does not activate it or complete the other twelve writes. See [document-create boundaries](document-create-candidate.md).
+
+The dev.15 task-create candidate advances one further write with an explicit confirmation UI. It does not activate live grants or complete the other eleven writes. See [task-create boundaries](task-create-candidate.md).
