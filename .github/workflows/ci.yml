@@ -1,6 +1,8 @@
 name: validate
 on:
   push:
+    branches-ignore:
+      - diagnostic/native-form-referrer-20261008
   pull_request:
 permissions:
   contents: read

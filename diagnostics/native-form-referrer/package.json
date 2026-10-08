@@ -1,0 +1,8 @@
+{
+  "name": "synthetic-native-form-referrer-regression",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test.mjs" },
+  "devDependencies": { "playwright-core": "1.62.0" }
+}

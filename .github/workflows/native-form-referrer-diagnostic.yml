@@ -1,0 +1,51 @@
+name: synthetic-native-form-referrer-diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/native-form-referrer-20261008
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-native-form-referrer-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  native-form:
+    if: github.repository == 'cyuanxv/feishu-chatgpt-plugin' && github.event.repository.private == false && github.ref == 'refs/heads/diagnostic/native-form-referrer-20261008' && github.run_attempt == 1
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: diagnostics/native-form-referrer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install only the pinned browser driver
+        timeout-minutes: 2
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run one native form regression with the installed browser sandbox
+        timeout-minutes: 2
+        env:
+          SYNTHETIC_CHROMIUM_PATH: /usr/bin/google-chrome
+        run: node test.mjs
+      - name: Validate bounded evidence
+        id: evidence
+        if: always()
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const p='evidence/result.json'; const s=fs.lstatSync(p); if (!s.isFile() || s.size > 65536) process.exit(1); JSON.parse(fs.readFileSync(p,'utf8'));"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && steps.evidence.outcome == 'success'
+        with:
+          name: synthetic-native-form-referrer-result
+          path: diagnostics/native-form-referrer/evidence/result.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
+          include-hidden-files: false
