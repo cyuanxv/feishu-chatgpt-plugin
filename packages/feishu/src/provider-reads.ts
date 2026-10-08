@@ -11,6 +11,17 @@ const safeUrl = (url: string | undefined): string | null => {
 };
 const plain = (value: string | undefined): string => (value ?? '').replace(/<[^>]*>/g, '');
 
+/** The search API accepts whole Unix seconds; never silently round a caller's narrower window. */
+export function assertMessageSearchTimePrecision(range: { start: string; end: string } | undefined): void {
+  if (range && [range.start, range.end].some(value => {
+    const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1];
+    // Inspect original digits too: Date.parse truncates sub-millisecond fractions such as .0001Z.
+    return Date.parse(value) % 1000 !== 0 || (fraction !== undefined && /[1-9]/.test(fraction));
+  })) {
+    throw new DomainError('INVALID_ARGUMENT', 'Provider message search requires whole-second time boundaries.');
+  }
+}
+
 /** Targeted real-provider calls with normalized, allowlisted data; no full workspace snapshot. These methods are not MCP tools yet. */
 export class FeishuProviderReads {
   constructor(private readonly gateway: FeishuSdkReadGateway, private readonly handles: Handles) {}
@@ -72,15 +83,50 @@ export class FeishuProviderReads {
   }
   async searchMessages(identity: Identity, input: { query: string; chat_id?: string; sender_open_id?: string; start?: string; end?: string }, page: Page = {}) {
     const checked = z.object({ query: z.string().trim().min(1).max(1000), chat_id: id.optional(), sender_open_id: id.optional(), start: z.iso.datetime({ offset: true }).optional(), end: z.iso.datetime({ offset: true }).optional() }).strict().refine(value => Boolean(value.start) === Boolean(value.end) && (!value.start || Date.parse(value.end!) > Date.parse(value.start)), 'An ordered complete time range is required.').parse(input);
+    assertMessageSearchTimePrecision(checked.start ? { start: checked.start, end: checked.end! } : undefined);
     const params = this.token('messages', checked, page, identity);
     const raw = await this.gateway.call('searchMessages', { data: { query: checked.query, filter: { ...(checked.chat_id ? { chat_ids: [checked.chat_id] } : {}), ...(checked.sender_open_id ? { from_ids: [checked.sender_open_id] } : {}), ...(checked.start ? { time_range: { start_time: String(Math.floor(Date.parse(checked.start) / 1000)), end_time: String(Math.floor(Date.parse(checked.end!) / 1000)) } } : {}) } }, params: { user_id_type: 'open_id', page_size: params.pageSize, ...(params.upstream ? { page_token: params.upstream } : {}) } }, identity);
-    return { messages: raw.items.map(item => { if (!item.meta_data?.message_id) throw new DomainError('UPSTREAM_ERROR', 'Provider message was missing an ID.'); if ((checked.chat_id && item.meta_data.chat_id !== checked.chat_id) || (checked.sender_open_id && item.meta_data.from_id !== checked.sender_open_id)) throw new DomainError('UPSTREAM_ERROR', 'Provider returned a message outside the requested chat or sender.'); return { message_id: item.meta_data.message_id, chat_id: item.meta_data.chat_id ?? null, thread_id: item.meta_data.thread_id ?? null, sender_open_id: item.meta_data.from_id ?? null, snippet: plain(item.display_info), created_at_provider: item.meta_data.create_time ?? null }; }), next_cursor: this.next('messages', checked, params.pageSize, raw.has_more, raw.page_token, identity, params.history), source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    if (!Array.isArray(raw.items) || raw.items.length > params.pageSize || typeof raw.has_more !== 'boolean') throw new DomainError('UPSTREAM_ERROR', 'Provider message search page was missing, oversized or had invalid pagination.');
+    const seen = new Set<string>();
+    return { messages: raw.items.map(item => {
+      if (!item.meta_data) throw new DomainError('UPSTREAM_ERROR', 'Provider message was missing metadata.');
+      const messageId = id.safeParse(item.meta_data?.message_id);
+      if (!messageId.success || seen.has(messageId.data)) throw new DomainError('UPSTREAM_ERROR', 'Provider message was missing a unique valid ID.');
+      seen.add(messageId.data);
+      if ((checked.chat_id && item.meta_data.chat_id !== checked.chat_id) || (checked.sender_open_id && item.meta_data.from_id !== checked.sender_open_id)) throw new DomainError('UPSTREAM_ERROR', 'Provider returned a message outside the requested chat or sender.');
+      return { message_id: messageId.data, chat_id: item.meta_data.chat_id ?? null, thread_id: item.meta_data.thread_id ?? null, sender_open_id: item.meta_data.from_id ?? null, snippet: plain(item.display_info), created_at_provider: item.meta_data.create_time ?? null };
+    }), next_cursor: this.next('messages', checked, params.pageSize, raw.has_more, raw.page_token, identity, params.history), source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   async document(identity: Identity, documentId: string) {
     id.parse(documentId);
     const [metadata, content] = await Promise.all([this.gateway.call('getDocument', { path: { document_id: documentId } }, identity), this.gateway.call('readDocument', { path: { document_id: documentId } }, identity)]);
-    if (!metadata.document?.document_id || typeof content.content !== 'string') throw new DomainError('UPSTREAM_ERROR', 'Provider document response was incomplete.');
+    if (metadata.document?.document_id !== documentId || typeof content.content !== 'string') throw new DomainError('UPSTREAM_ERROR', 'Provider document response was incomplete or mismatched.');
     return { doc_id: metadata.document.document_id, title: metadata.document.title ?? '', content: content.content, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+  }
+  /** A bounded metadata read, never a download. Keep each failed/missing request visible. */
+  async metadata(identity: Identity, requests: { doc_token: string; doc_type: 'file' | 'docx' }[]) {
+    const requestSchema = z.object({ doc_token: id, doc_type: z.enum(['file', 'docx']) }).strict();
+    const parsed = z.array(requestSchema).min(1).max(200).parse(requests);
+    if (new Set(parsed.map(item => item.doc_token)).size !== parsed.length) throw new DomainError('INVALID_ARGUMENT', 'Metadata requests must have unique resource tokens.');
+    const raw = await this.gateway.call('batchMetadata', { data: { request_docs: parsed, with_url: true }, params: { user_id_type: 'open_id' } }, identity);
+    const response = z.object({ metas: z.array(z.object({ doc_token: id, doc_type: z.enum(['file', 'docx']), title: z.string(), owner_id: z.string().optional(), create_time: z.string().optional(), latest_modify_time: z.string().optional(), url: z.string().optional(), request_doc_info: requestSchema.optional() })), failed_list: z.array(z.object({ token: id, code: z.number().int() })).optional() }).safeParse(raw);
+    if (!response.success) throw new DomainError('UPSTREAM_ERROR', 'Provider metadata response was malformed.');
+    const requested = new Map(parsed.map(item => [item.doc_token, item.doc_type]));
+    const seen = new Set<string>();
+    for (const meta of response.data.metas) {
+      if (requested.get(meta.doc_token) !== meta.doc_type || (meta.request_doc_info && (meta.request_doc_info.doc_token !== meta.doc_token || meta.request_doc_info.doc_type !== meta.doc_type)) || seen.has(meta.doc_token)) throw new DomainError('UPSTREAM_ERROR', 'Provider metadata did not match unique requested resources.');
+      seen.add(meta.doc_token);
+    }
+    for (const failure of response.data.failed_list ?? []) {
+      if (!requested.has(failure.token) || seen.has(failure.token)) throw new DomainError('UPSTREAM_ERROR', 'Provider metadata failures did not match unique requested resources.');
+      seen.add(failure.token);
+    }
+    const items = parsed.map(request => {
+      const meta = response.data.metas.find(item => item.doc_token === request.doc_token);
+      const failure = response.data.failed_list?.find(item => item.token === request.doc_token);
+      return { ...request, status: meta ? 'ok' as const : failure ? 'failed' as const : 'unknown' as const, metadata: meta ? { title: meta.title, owner_open_id: meta.owner_id ?? null, created_at_provider: meta.create_time ?? null, updated_at_provider: meta.latest_modify_time ?? null, url: safeUrl(meta.url) } : null, provider_code: failure?.code ?? null };
+    });
+    return { items, partial: items.some(item => item.status !== 'ok'), coverage: 'metadata_only' as const, source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   async tasks(identity: Identity, completed: boolean | undefined, page: Page = {}) {
     const params = this.token('tasks', { completed }, page, identity);
@@ -89,7 +135,7 @@ export class FeishuProviderReads {
   }
   async task(identity: Identity, taskId: string) {
     id.parse(taskId); const raw = await this.gateway.call('getTask', { path: { task_guid: taskId }, params: { user_id_type: 'open_id' } }, identity);
-    if (!raw.task?.guid) throw new DomainError('UPSTREAM_ERROR', 'Provider task response was incomplete.');
+    if (raw.task?.guid !== taskId) throw new DomainError('UPSTREAM_ERROR', 'Provider task response was incomplete or mismatched.');
     return { task_id: raw.task.guid, title: raw.task.summary ?? '', description: raw.task.description ?? '', due: raw.task.due ?? null, completed_at: raw.task.completed_at ?? null, source: 'feishu_api' as const };
   }
   /** Explicit lower-level schemas preserve SDK field names; high-level Base/calendar mappers are the next slice. */

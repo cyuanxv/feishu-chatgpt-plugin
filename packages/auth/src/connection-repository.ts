@@ -5,19 +5,21 @@ import { TokenCipher, type FeishuTokens } from './vault.js';
 /** Stores verified provider identity and encrypted tokens atomically. No ambient database connection is opened. */
 export class PostgresConnectionRepository {
   constructor(private readonly pool: Pick<Pool, 'connect'>, private readonly cipher: TokenCipher) {}
-  async link(identity: Identity, verifiedProfile: { openId: string; tenantId: string }, tokens: FeishuTokens): Promise<void> {
+  async link(identity: Identity, verifiedProfile: { openId: string; tenantId: string; grantedProviderScopes?: readonly string[] }, tokens: FeishuTokens): Promise<void> {
     if (!verifiedProfile.openId || verifiedProfile.tenantId !== identity.tenantId) throw new DomainError('PERMISSION_DENIED', 'Verified provider identity does not match the connection.');
+    const providerScopes = [...new Set(verifiedProfile.grantedProviderScopes ?? [])];
+    if (providerScopes.length > 100 || providerScopes.some(scope => typeof scope !== 'string' || !/^[a-zA-Z0-9_:.-]{1,128}$/.test(scope))) throw new DomainError('INVALID_ARGUMENT', 'Verified provider permissions were malformed.');
     const sealed = this.cipher.seal(identity, tokens);
     let client: PoolClient | undefined;
     try {
       client = await this.pool.connect();
       await client.query('BEGIN');
-      const result = await client.query(`INSERT INTO feishu_connections(id,subject,tenant_id,domain,open_id,scopes,status)
-        VALUES($1,$2,$3,$4,$5,$6,'active')
-        ON CONFLICT(id) DO UPDATE SET scopes=EXCLUDED.scopes,status='active',grant_generation=feishu_connections.grant_generation+1
+      const result = await client.query(`INSERT INTO feishu_connections(id,subject,tenant_id,domain,open_id,scopes,provider_scopes,status)
+        VALUES($1,$2,$3,$4,$5,$6,$7,'active')
+        ON CONFLICT(id) DO UPDATE SET scopes=EXCLUDED.scopes,provider_scopes=EXCLUDED.provider_scopes,status='active',grant_generation=feishu_connections.grant_generation+1
         WHERE feishu_connections.subject=EXCLUDED.subject AND feishu_connections.tenant_id=EXCLUDED.tenant_id
           AND feishu_connections.domain=EXCLUDED.domain AND feishu_connections.open_id=EXCLUDED.open_id
-        RETURNING id`, [identity.connectionId, identity.subject, identity.tenantId, identity.domain, verifiedProfile.openId, identity.scopes]);
+        RETURNING id`, [identity.connectionId, identity.subject, identity.tenantId, identity.domain, verifiedProfile.openId, identity.scopes, providerScopes]);
       if (result.rowCount !== 1) throw new DomainError('PERMISSION_DENIED', 'Existing connection belongs to another identity.');
       await client.query(`INSERT INTO feishu_tokens(connection_id,subject,tenant_id,sealed,expires_at,refresh_expires_at)
         VALUES($1,$2,$3,$4::jsonb,to_timestamp($5),to_timestamp($6))

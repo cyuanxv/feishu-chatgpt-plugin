@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.1.0-dev.12
+
+- Integrate the previously reviewed default-disabled agenda HTTP/OAuth candidates with the message-search filter branch while preserving both histories.
+- Support sender, chat and whole-second time filters for explicit message-only unified searches; bind every filter to continuation.
+- Reject malformed and oversized message pages, duplicate or invalid IDs and fractional-second bounds, including sub-millisecond fractions.
+- Add 47 message-search contract tests and 12 retry-authorization regressions; retain native PostgreSQL/container CI.
+- Revalidate current grant/request state and provider-token expiry before every retry; never reuse a cached authorization decision across backoff.
+- Keep provider/issuer runtime gates disabled by default, all thirteen writes closed and real account/ChatGPT acceptance explicitly unverified.
+
+## 0.1.0-dev.11
+
+- Added a separate, default-disabled Feishu browser login and single-agenda OAuth issuer candidate using official v3 token and user_info contracts
+- Added explicit same-origin consent, secure browser/state/CSRF binding, stable provider account mapping and encrypted short-lived pending credentials
+- Added transactional authorization codes and hashed MCP access/refresh tokens, exact client/redirect/resource/S256 binding, rotation and committed family revocation on replay
+- Reused official MCP SDK token/revocation handlers; pre-registered public clients only, with no DCR/CIMD or arbitrary callback fetching
+- Added a full synthetic HTTP authorization-to-agenda test that does not seed connections/grants/tokens directly
+- Added five native PostgreSQL concurrency cases for an isolated CI-only synthetic service; these are skipped locally and must pass CI before being claimed
+- Real Feishu authorization, hosted PostgreSQL/TLS/roles, browser/ChatGPT acceptance and automatic Feishu refresh remain unverified or incomplete
+
+## 0.1.0-dev.10
+
+- Added a single-tool HTTP resource-server candidate for get_agenda with persisted opaque Bearer verification, audience/expiry/revocation and account-generation checks
+- Stored actual provider scope grants separately and revalidated them plus encrypted user credentials before every provider read
+- Used the official recurring-event instance_view contract, bounded local paging and content-version checks for the candidate agenda
+- Added migration 003, default-disabled provider entrypoint, verified-TLS configuration, Docker recipe and production import/refusal smoke check
+- 414 offline tests pass; real human login/consent/issuer, Feishu grants, native PostgreSQL, HTTPS hosting and ChatGPT installation remain unverified
+- No real credentials, external authorization, deployment, PR merge or fee commitment was performed
+
+## 0.1.0-dev.9
+
+- Added an inert finite router for all seventeen provider reads, reusing shared input schemas, scope policy, rate limits, audit and envelope validation
+- Kept synthetic and provider provenance/ref types separate; provider output always carries live_verified=false
+- Added exact resource/session/expiry/context checks without claiming to authenticate bearer tokens or verify actual provider grants
+- Added Base signed-reference/table-page input and matching safe mock behavior, plus capacity-only room metadata paging
+- Rejected all thirteen writes, raw SDK operation names, unsupported filters, invalid budgets and model-supplied identity fields
+- Added a real-SDK injected-transport route test covering every read; expanded to 369 offline tests
+- No server import, production HTTP authentication, real credentials, deployment or live-mode change
+
+## 0.1.0-dev.8
+
+- Connected explicit Base search results to signed metadata-only fetch and table-page continuation
+- Added explicit cross-calendar agenda traversal with window/scope-bound cursors, limited per-call work and persisted unavailable-calendar coverage
+- Preserved all-day dates and calendar/provider order instead of claiming global chronological sorting
+- Rejected thread cycles, missing/oversized pages, duplicate messages and unidentified root chats
+- Corrected Base title-search identity evidence: the project forces user tokens; the complete provider identity matrix is unverified
+- Expanded to 330 offline tests; no endpoint, background framework or live runtime was added
+
+## 0.1.0-dev.7
+
+- Added bounded Base title candidates, explicit Base/table selection, Wiki-to-Base resolution and the schema-to-record read path
+- Restricted Base search to BITABLE at request and response boundaries without requiring unrelated logical document permission
+- Kept Wiki node tokens separate from Base app tokens and rechecked resolved targets across table-page continuation
+- Rejected unknown/duplicate/oversized field and record pages, malformed field IDs/types and inherited object properties
+- Expanded to 303 offline tests; public tool count and live-mode gate remain unchanged
+
+## 0.1.0-dev.6
+
+- Added tasklist discovery and tasklist-bound task pages, preserving empty pages with provider continuation
+- Added explicit-assignee search-to-detail reads, bounded to twenty detail checks and one at a time
+- Rechecked task IDs, assignee roles and completion filters; inaccessible or unverified hits remain partial without exposing mismatched task content
+- Bound task cursors to filters, identity, scopes and page size, with cycle/budget checks
+- Preserved all-day due values and unknown completion/membership instead of guessing
+- Expanded to 272 offline tests; no live identity, external write or public runtime is enabled
+
+## 0.1.0-dev.5
+
+- Completed explicit nested comment-reply paging through document-bound signed cursors, root labeling and cycle/budget checks
+- Added file search-to-metadata-fetch with scoped signed references; no binary download or fabricated file text
+- Preserved batch metadata failures and unknown responses, rejected unrequested/duplicate/mismatched resources and limited output projection
+- Rejected mismatched DOCX metadata IDs and malformed comment/reply pages
+- Expanded to 244 offline tests; live MCP routing and production configuration remain closed
+
 ## 0.1.0-dev.4
 
 - Added fixed-endpoint, user-only name/email search from the official CLI contract, with ambiguous-candidate and query-refinement semantics

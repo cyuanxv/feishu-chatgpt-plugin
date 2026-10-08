@@ -1,0 +1,32 @@
+import { beforeAll,beforeEach,afterAll,describe,it,expect } from 'vitest';
+import { randomBytes,randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { Pool } from 'pg';
+import { PostgresAgendaIssuer } from '../packages/auth/src/durable-issuer.js';
+import { PostgresConnectionRepository } from '../packages/auth/src/connection-repository.js';
+import { PostgresResourceAccess,AGENDA_PROVIDER_SCOPES } from '../packages/auth/src/resource-access.js';
+import { TokenCipher } from '../packages/auth/src/vault.js';
+import { pkceChallenge } from '../packages/auth/src/mock-broker.js';
+import { demoIdentity } from '../packages/feishu/src/fixtures.js';
+
+// CI-only ephemeral service, with public synthetic credentials and an owned random schema.
+// Never reads DATABASE_URL or any user credential. No test runs against an operator database.
+describe.skipIf(process.env.GITHUB_ACTIONS!=='true'||process.env.FEISHU_CI_POSTGRES!=='1')('native PostgreSQL concurrent issuer transactions',()=>{
+  const schema='fixture_'+randomUUID().replaceAll('-','');
+  const connection={host:'127.0.0.1',port:5432,user:'synthetic_ci',password:'synthetic_ci',database:'feishu_ci',connectionTimeoutMillis:5000,query_timeout:10000,statement_timeout:10000};
+  let admin:Pool,pool:Pool,issuer:PostgresAgendaIssuer,repo:PostgresConnectionRepository,access:PostgresResourceAccess;
+  const identity={...demoIdentity(),scopes:['calendar.read']};const providerTokens={accessToken:'synthetic-provider-access',refreshToken:'synthetic-provider-refresh',expiresAt:Date.now()+3600000,refreshExpiresAt:Date.now()+86400000};
+  const config={issuer:'https://identity.example.test/',resource:'https://mcp.example.test/mcp',clients:[{clientId:'fixture-client',name:'Synthetic host',redirects:['https://host.example.test/callback']}]};
+  const verifier='V'.repeat(43);const request={clientId:'fixture-client',redirectUri:'https://host.example.test/callback',resource:config.resource,challenge:pkceChallenge(verifier),scopes:['calendar.read']};
+  const code=async(who=identity)=>{const browser=randomBytes(32).toString('base64url');return new URL(await issuer.consent(await issuer.begin(request,browser),browser,who,true)).searchParams.get('code')!;};
+  const exchange=(value:string)=>issuer.exchange({code:value,clientId:request.clientId,redirectUri:request.redirectUri,resource:config.resource,verifier});
+  const refresh=(value:string)=>issuer.refresh({refreshToken:value,clientId:request.clientId,resource:config.resource});
+  beforeAll(async()=>{admin=new Pool({...connection,max:1});await admin.query(`CREATE SCHEMA ${schema}`);pool=new Pool({...connection,max:8,options:`-c search_path=${schema}`});for(const name of ['001_connections.sql','002_oauth_link_attempts.sql','003_resource_access.sql','004_mcp_issuer.sql'])await pool.query(await readFile(new URL('../infra/migrations/'+name,import.meta.url),'utf8'));issuer=new PostgresAgendaIssuer(pool,config);repo=new PostgresConnectionRepository(pool,new TokenCipher(new Map([['fixture',randomBytes(32)]]),'fixture'));access=new PostgresResourceAccess(pool);});
+  beforeEach(async()=>{await pool.query('TRUNCATE feishu_connections CASCADE; TRUNCATE mcp_authorization_attempts');await repo.link(identity,{openId:'ou_fixture',tenantId:identity.tenantId,grantedProviderScopes:AGENDA_PROVIDER_SCOPES},providerTokens);});
+  afterAll(async()=>{await pool?.end();if(admin){await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}});
+  it('consumes concurrent code exchanges once and commits replay-family revocation',async()=>{const c=await code();const results=await Promise.allSettled([exchange(c),exchange(c)]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);for(const result of results)if(result.status==='fulfilled')await expect(access.authenticate(result.value.access_token,config.resource)).rejects.toThrow();else expect(result.reason.errorCode).toBe('invalid_grant')});
+  it('rotates one refresh token once across independent pool clients',async()=>{const issued=await exchange(await code());const results=await Promise.allSettled([refresh(issued.refresh_token!),refresh(issued.refresh_token!)]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);for(const result of results)if(result.status==='fulfilled')await expect(access.authenticate(result.value.access_token,config.resource)).rejects.toThrow();else expect(result.reason.errorCode).toBe('invalid_grant')});
+  it('does not leave usable access after concurrent disconnect and code exchange',async()=>{const c=await code();const results=await Promise.allSettled([exchange(c),repo.disconnect(identity)]);expect(results[1]!.status).toBe('fulfilled');const issued=results[0]!;if(issued.status==='fulfilled')await expect(access.authenticate(issued.value!.access_token,config.resource)).rejects.toThrow();else expect(issued.reason.errorCode).toBe('invalid_grant')});
+  it('does not resurrect the old generation after concurrent relink and refresh',async()=>{const issued=await exchange(await code());const results=await Promise.allSettled([refresh(issued.refresh_token!),repo.link(identity,{openId:'ou_fixture',tenantId:identity.tenantId,grantedProviderScopes:AGENDA_PROVIDER_SCOPES},{...providerTokens,accessToken:'synthetic-new-provider-access'})]);expect(results[1]!.status).toBe('fulfilled');const rotated=results[0]!;if(rotated.status==='fulfilled')await expect(access.authenticate(rotated.value!.access_token,config.resource)).rejects.toThrow();else expect(rotated.reason.errorCode).toBe('invalid_grant');expect((await pool.query('SELECT grant_generation::text AS generation FROM feishu_connections')).rows[0].generation).toBe('2')});
+  it('supports concurrent independent accounts without confusing subject bindings',async()=>{const beta={...demoIdentity('beta'),scopes:['calendar.read']};await repo.link(beta,{openId:'ou_beta',tenantId:beta.tenantId,grantedProviderScopes:AGENDA_PROVIDER_SCOPES},providerTokens);const codes=await Promise.all([code(identity),code(beta)]);const issued=await Promise.all(codes.map(exchange));const grants=await Promise.all(issued.map(token=>access.authenticate(token.access_token,config.resource)));expect(grants.map(grant=>grant.identity.subject)).toEqual([identity.subject,beta.subject]);expect(new Set(grants.map(grant=>grant.grantId)).size).toBe(2)});
+});

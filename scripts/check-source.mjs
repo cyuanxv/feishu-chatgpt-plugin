@@ -4,7 +4,7 @@ import { relative, resolve, join } from 'node:path';
 // Audit the release allowlist only. Never inspect ambient credentials or unrelated directories.
 const root = resolve(import.meta.dirname, '..');
 const roots = ['apps', 'packages', 'tests', 'docs', 'infra', 'scripts', '.github'];
-const files = ['package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', '.env.example', '.gitignore'];
+const files = ['package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', '.env.example', '.gitignore', 'Dockerfile', '.dockerignore'];
 async function visit(path) {
   const stat = await lstat(path);
   if (stat.isSymbolicLink()) throw new Error('Source export cannot include symlinks.');

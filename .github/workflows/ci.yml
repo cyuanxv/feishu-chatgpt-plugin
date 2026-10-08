@@ -20,4 +20,48 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run smoke:production
       - run: npm run check:source
+  container-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t feishu-agenda-candidate .
+      - name: Refuse unconfigured container startup
+        run: |
+          set +e
+          docker run --rm -e FEISHU_PROVIDER_RUNTIME=disabled feishu-agenda-candidate
+          result=$?
+          set -e
+          test "$result" -eq 78
+      - name: Refuse unconfigured issuer container startup
+        run: |
+          set +e
+          docker run --rm -e FEISHU_AUTH_RUNTIME=disabled feishu-agenda-candidate node dist/apps/mcp-server/src/main-issuer.js
+          result=$?
+          set -e
+          test "$result" -eq 78
+  native-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: synthetic_ci
+          POSTGRES_PASSWORD: synthetic_ci
+          POSTGRES_DB: feishu_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U synthetic_ci -d feishu_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx vitest run tests/issuer-native-pg.test.ts
+        env:
+          FEISHU_CI_POSTGRES: '1'

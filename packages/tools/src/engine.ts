@@ -63,9 +63,16 @@ export class ToolEngine {
       case 'list_doc_comments': return this.page(name, required(workspace.documents.find(doc => doc.doc_id === args.doc_id), 'Document').comments, args, identity, 'comments');
       case 'list_bases': return this.page(name, workspace.bases.filter(base => !args.query || includes(base.name, text(args, 'query'))).map(base => ({ base_id: base.base_id, name: base.name })), args, identity, 'bases');
       case 'get_base_schema': {
-        const base = required(workspace.bases.find(item => item.base_id === args.base_id), 'Base');
+        let baseId = args.base_id;
+        if (args.base_ref) {
+          const ref = this.handles.decode('resource', identity, text(args, 'base_ref'));
+          if (ref.type !== 'base' || typeof ref.id !== 'string') throw new DomainError('INVALID_ARGUMENT', 'Select a synthetic Base search reference.');
+          baseId = ref.id;
+        }
+        const base = required(workspace.bases.find(item => item.base_id === baseId), 'Base');
         if (args.table_id) required(base.tables.find(table => table.table_id === args.table_id), 'Table');
-        return { data: { base_id: base.base_id, tables: base.tables.filter(table => !args.table_id || table.table_id === args.table_id).map(({ table_id, name, fields }) => ({ table_id, name, fields })), schema_version: digest(JSON.stringify(base.tables.map(table => table.fields))).slice(0, 16) } };
+        const page = this.page(name, base.tables.filter(table => !args.table_id || table.table_id === args.table_id).map(({ table_id, name, fields }) => ({ table_id, name, fields })), args, identity, 'tables');
+        return { ...page, data: { ...page.data, base_id: base.base_id, schema_version: digest(JSON.stringify(base.tables.map(table => table.fields))).slice(0, 16) } };
       }
       case 'query_base_records': return this.queryBase(args, identity, workspace);
       case 'get_agenda': {
