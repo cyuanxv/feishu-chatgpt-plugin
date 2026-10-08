@@ -22,7 +22,7 @@ Provider success remains an unverified provider receipt, not proof of complete r
 
 ## Trust boundary and exact remaining activation work
 
-The actual host must bind its own authenticated user-controlled browser to the matching MCP account and deliver the bootstrap response/cookie directly over the configured HTTPS origin. Its private signing key and handoff proofs **must never enter model/tool output, frontend code, URLs or this review service**. This repository only accepts an Ed25519 **public SPKI** key and provides no host signing endpoint. A private PEM is rejected before Node can derive a public key from it.
+The actual host must bind its own authenticated user-controlled browser to the matching MCP account and deliver the bootstrap response/cookie directly over the configured HTTPS origin. Its private signing key must never enter this review service, model/tool output, frontend code or URLs. Handoff proofs are accepted only by the bootstrap header verifier and must never appear in model/tool output, frontend code, URLs or logs. This repository only accepts an Ed25519 **public SPKI** key and provides no host signing endpoint. A private PEM is rejected before Node can derive a public key from it.
 
 A production host adapter is **not implemented or deployed**. A conventional browser navigation cannot set the bootstrap Bearer/custom headers by itself. The trusted host needs a separately reviewed same-origin backend handoff (forwarding the verified bootstrap HTML/Set-Cookie directly to its user browser) or equivalent trusted embedded-host transport. The synthetic browser bridge is not such a production adapter and must never be deployed.
 

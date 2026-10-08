@@ -1,7 +1,6 @@
 """Synthetic browser checks against the production review HTML/JS + HTTP handlers.
 The test-only bridge does not validate production HTTPS or __Host cookie delivery.
 """
-import base64
 import json
 import os
 from pathlib import Path
@@ -89,11 +88,6 @@ try:
         assert errors == [], errors
         print(json.dumps({'browser': browser.version, 'chromium_sandbox': True, 'synthetic_provider_calls': 1, 'real_provider_calls': 0, 'checks': ['full preview', 'verified account/folder', 'single create on repeated click', 'receipt', 'reload inert', 'cancel', 'navigation without create', 'mobile no overflow', 'no page errors']}, ensure_ascii=False))
         browser.close()
-    # Synthetic screenshots only; the log allows reviewers to inspect images without artifact APIs.
-    for path in sorted(output.glob('*.png')):
-        print('REVIEW_SCREENSHOT_BEGIN ' + path.name)
-        print(base64.b64encode(path.read_bytes()).decode())
-        print('REVIEW_SCREENSHOT_END ' + path.name)
 finally:
     server.terminate()
     try:

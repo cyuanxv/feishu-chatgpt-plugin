@@ -26,7 +26,7 @@
       remaining=result.remaining_ms;measured=performance.now();
       if(!submitted&&result.phase==='review'&&result.receipt.status==='preview'){
         state='ready';confirm.disabled=!result.can_submit;cancel.disabled=false;
-        message(result.can_submit?'账户、目录和内容版本已核验。请检查上方完整正文。':'当前仅能预览，真实创建入口仍关闭。');
+        message(result.can_submit?'账户和内容版本已核验。请核对目标目录及完整正文。':'当前仅能预览，真实创建入口仍关闭。');
       }else{renderReceipt(result);}
     }catch{if(epoch===generation&&state!=='ended'){confirm.disabled=true;cancel.disabled=true;message(submitted?'提交结果尚未确认。只查询回执，不会重复提交。':'无法核验预览状态，请稍后从宿主重新打开。','error');if(submitted&&Math.max(0,remaining-(performance.now()-measured))>0){stopPolling();pollTimer=setTimeout(()=>check(false),3000);}}}
   }
@@ -46,6 +46,7 @@
     state='suspended';
   });
   window.addEventListener('pageshow',event=>{if(event.persisted){state='checking';check(false);}});
-  setInterval(()=>{const left=Math.max(0,remaining-(performance.now()-measured));expiry.textContent=left>0?'剩余 '+Math.floor(left/60000)+':'+String(Math.floor(left/1000)%60).padStart(2,'0'):'预览已到期';if(left<=0&&state!=='ended'&&state!=='suspended'&&state!=='complete')inert(submitted?'会话已到期，请从宿主查询创建回执。不会重复创建。':'预览已到期，未提交创建。请重新打开。');},1000);
+  function tick(){const left=Math.max(0,remaining-(performance.now()-measured));expiry.textContent=left>0?'剩余 '+Math.floor(left/60000)+':'+String(Math.floor(left/1000)%60).padStart(2,'0'):'预览已到期';if(left<=0&&state!=='ended'&&state!=='suspended'&&state!=='complete')inert(submitted?'会话已到期，请从宿主查询创建回执。不会重复创建。':'预览已到期，未提交创建。请重新打开。');}
+  setInterval(tick,1000);tick();
   check(false);
 })();
