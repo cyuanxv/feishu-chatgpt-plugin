@@ -246,12 +246,32 @@ export function createWorker(
             });
           } catch (e) {
             const error = safeError(e);
+            const diagnostic = {
+              correlation_id: crypto.randomUUID(),
+              ...(e instanceof ProviderFailure && e.providerCode !== undefined
+                ? { provider_code: e.providerCode }
+                : {}),
+              ...(e instanceof ProviderFailure && e.providerLogId
+                ? { provider_log_id: e.providerLogId }
+                : {}),
+            };
+            console.info(
+              JSON.stringify({
+                event: "feishu_agenda_failure",
+                error_code: error.code,
+                ...diagnostic,
+              }),
+            );
             return response({
               jsonrpc: "2.0",
               id,
               result: {
                 content: [{ type: "text", text: error.code }],
-                structuredContent: { ok: false, error: error.code },
+                structuredContent: {
+                  ok: false,
+                  error: error.code,
+                  ...diagnostic,
+                },
                 isError: true,
               },
             });

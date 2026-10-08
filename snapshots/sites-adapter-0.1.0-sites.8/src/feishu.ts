@@ -278,23 +278,48 @@ export class Feishu {
   ) {
     const url = new URL("https://open.feishu.cn" + path);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const { body: raw } = await this.request(
+    const operation: ProviderOperation = path.includes("user_info")
+      ? "user_info"
+      : path.includes("instance_view")
+        ? "calendar_instances"
+        : "calendar_list";
+    const { body: raw, logId } = await this.request(
       url.href,
       {
         method: "GET",
         headers: { Authorization: "Bearer " + token },
       },
-      path.includes("user_info")
-        ? "user_info"
-        : path.includes("instance_view")
-          ? "calendar_instances"
-          : "calendar_list",
+      operation,
     );
-    assert(
-      raw && raw.code === 0 && raw.data && typeof raw.data === "object",
-      "provider_invalid_response",
-      502,
-    );
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      Array.isArray(raw) ||
+      raw.code !== 0 ||
+      !raw.data ||
+      typeof raw.data !== "object" ||
+      Array.isArray(raw.data)
+    ) {
+      // Read APIs can return a failure envelope with HTTP 200. Retain only
+      // bounded diagnostic evidence; never infer retry/auth semantics from an
+      // undocumented business code or expose the provider's message/data.
+      const diagnostic = providerDiagnostic(
+        {
+          operation,
+          kind: "invalid_response",
+          http_status: 200,
+          ...(logId ? { provider_log_id: logId } : {}),
+        },
+        raw,
+      );
+      emitProviderDiagnostic(diagnostic);
+      throw new ProviderFailure(
+        "provider_invalid_response",
+        502,
+        diagnostic.provider_code,
+        logId,
+      );
+    }
     return raw.data;
   }
   async profile(token: string) {
