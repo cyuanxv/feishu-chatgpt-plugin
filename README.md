@@ -2,7 +2,7 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.11`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.12`
 
 ## Current safety boundary
 
@@ -59,6 +59,9 @@ docs/                   Architecture, roadmap, release and review limitations
 The product document says 29 tools but enumerates 30. All 30 are tracked in [the tool catalog](docs/tool-catalog.md); none was silently removed.
 
 ## Provider implementation progress
+
+The unified provider search now supports owner (sender open ID), chat and whole-second time filters for explicit message-only searches. Filters bind to every continuation; unsupported mixed document/Base filters fail explicitly. Message search pages reject missing/malformed pagination, oversized pages and duplicate/invalid IDs. The default-disabled agenda resource candidate still exposes only get_agenda; these broader reads are not silently added to it.
+
 
 The provider slices add 31 bounded provider read bindings, targeted domain adapters, scoped document/message search-to-fetch (including Wiki DOCX resolution), message-thread reads and meeting-slot suggestions. This binding count is separate from the 17 public mock read tools; Base-only wrappers intentionally narrow existing APIs. File search/fetch returns metadata only, never downloads file contents. Comment previews expose signed reply-page cursors. People search returns ambiguous candidates without selecting a recipient; room selection combines known capacity with explicit-window availability. Task reads distinguish current-user, explicit tasklist and explicit-assignee coverage, retaining inaccessible/unknown results as partial. Base title search now leads to explicit Base/table selection and the reviewed schema/record mapper, with no claimed all-Base enumeration or Wiki-token guessing. Feishu token exchange/refresh primitives, encrypted one-time PKCE state and transactional account linking are also implemented. Contract tests run the actual installed SDK against an injected synthetic HTTP transport. Database integration tests execute real PostgreSQL SQL in memory through PGlite.
 

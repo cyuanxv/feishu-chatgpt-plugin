@@ -138,10 +138,12 @@ export class FeishuSdkReadGateway {
       const path = 'path' in payload ? payload.path : undefined;
       if (path && (typeof path !== 'object' || Object.values(path).some(value => typeof value !== 'string' || value === '.' || value === '..' || !/^[A-Za-z0-9_.@+-]{1,256}$/.test(value)))) throw new DomainError('INVALID_ARGUMENT', 'Provider resource ID is invalid.');
     }
-    const tokens = await this.tokenProvider.get(identity);
-    if (!tokens.accessToken || tokens.expiresAt <= Date.now()) throw new DomainError('AUTH_REQUIRED', 'A valid user authorization is required.');
     const method = this.session.reads[operation];
     for (let attempt = 0; attempt < 3; attempt++) {
+      // Backoff can outlive the request or its grant. Revalidate immediately before every attempt.
+      // Keep authorization failures outside the upstream catch so they cannot be retried or remapped.
+      const tokens = await this.tokenProvider.get(identity);
+      if (!tokens.accessToken || !Number.isFinite(tokens.expiresAt) || tokens.expiresAt <= Date.now()) throw new DomainError('AUTH_REQUIRED', 'A valid user authorization is required.');
       try {
         // SDK method signatures remain the authority for payload/response fields. All calls force user identity, with no bot fallback.
         const response = await Reflect.apply(method, undefined, [payload, withUserAccessToken(tokens.accessToken)]) as SdkReadResponse<K>;

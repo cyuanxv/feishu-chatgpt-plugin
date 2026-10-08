@@ -11,6 +11,17 @@ const safeUrl = (url: string | undefined): string | null => {
 };
 const plain = (value: string | undefined): string => (value ?? '').replace(/<[^>]*>/g, '');
 
+/** The search API accepts whole Unix seconds; never silently round a caller's narrower window. */
+export function assertMessageSearchTimePrecision(range: { start: string; end: string } | undefined): void {
+  if (range && [range.start, range.end].some(value => {
+    const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1];
+    // Inspect original digits too: Date.parse truncates sub-millisecond fractions such as .0001Z.
+    return Date.parse(value) % 1000 !== 0 || (fraction !== undefined && /[1-9]/.test(fraction));
+  })) {
+    throw new DomainError('INVALID_ARGUMENT', 'Provider message search requires whole-second time boundaries.');
+  }
+}
+
 /** Targeted real-provider calls with normalized, allowlisted data; no full workspace snapshot. These methods are not MCP tools yet. */
 export class FeishuProviderReads {
   constructor(private readonly gateway: FeishuSdkReadGateway, private readonly handles: Handles) {}
@@ -72,9 +83,19 @@ export class FeishuProviderReads {
   }
   async searchMessages(identity: Identity, input: { query: string; chat_id?: string; sender_open_id?: string; start?: string; end?: string }, page: Page = {}) {
     const checked = z.object({ query: z.string().trim().min(1).max(1000), chat_id: id.optional(), sender_open_id: id.optional(), start: z.iso.datetime({ offset: true }).optional(), end: z.iso.datetime({ offset: true }).optional() }).strict().refine(value => Boolean(value.start) === Boolean(value.end) && (!value.start || Date.parse(value.end!) > Date.parse(value.start)), 'An ordered complete time range is required.').parse(input);
+    assertMessageSearchTimePrecision(checked.start ? { start: checked.start, end: checked.end! } : undefined);
     const params = this.token('messages', checked, page, identity);
     const raw = await this.gateway.call('searchMessages', { data: { query: checked.query, filter: { ...(checked.chat_id ? { chat_ids: [checked.chat_id] } : {}), ...(checked.sender_open_id ? { from_ids: [checked.sender_open_id] } : {}), ...(checked.start ? { time_range: { start_time: String(Math.floor(Date.parse(checked.start) / 1000)), end_time: String(Math.floor(Date.parse(checked.end!) / 1000)) } } : {}) } }, params: { user_id_type: 'open_id', page_size: params.pageSize, ...(params.upstream ? { page_token: params.upstream } : {}) } }, identity);
-    return { messages: raw.items.map(item => { if (!item.meta_data?.message_id) throw new DomainError('UPSTREAM_ERROR', 'Provider message was missing an ID.'); if ((checked.chat_id && item.meta_data.chat_id !== checked.chat_id) || (checked.sender_open_id && item.meta_data.from_id !== checked.sender_open_id)) throw new DomainError('UPSTREAM_ERROR', 'Provider returned a message outside the requested chat or sender.'); return { message_id: item.meta_data.message_id, chat_id: item.meta_data.chat_id ?? null, thread_id: item.meta_data.thread_id ?? null, sender_open_id: item.meta_data.from_id ?? null, snippet: plain(item.display_info), created_at_provider: item.meta_data.create_time ?? null }; }), next_cursor: this.next('messages', checked, params.pageSize, raw.has_more, raw.page_token, identity, params.history), source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
+    if (!Array.isArray(raw.items) || raw.items.length > params.pageSize || typeof raw.has_more !== 'boolean') throw new DomainError('UPSTREAM_ERROR', 'Provider message search page was missing, oversized or had invalid pagination.');
+    const seen = new Set<string>();
+    return { messages: raw.items.map(item => {
+      if (!item.meta_data) throw new DomainError('UPSTREAM_ERROR', 'Provider message was missing metadata.');
+      const messageId = id.safeParse(item.meta_data?.message_id);
+      if (!messageId.success || seen.has(messageId.data)) throw new DomainError('UPSTREAM_ERROR', 'Provider message was missing a unique valid ID.');
+      seen.add(messageId.data);
+      if ((checked.chat_id && item.meta_data.chat_id !== checked.chat_id) || (checked.sender_open_id && item.meta_data.from_id !== checked.sender_open_id)) throw new DomainError('UPSTREAM_ERROR', 'Provider returned a message outside the requested chat or sender.');
+      return { message_id: messageId.data, chat_id: item.meta_data.chat_id ?? null, thread_id: item.meta_data.thread_id ?? null, sender_open_id: item.meta_data.from_id ?? null, snippet: plain(item.display_info), created_at_provider: item.meta_data.create_time ?? null };
+    }), next_cursor: this.next('messages', checked, params.pageSize, raw.has_more, raw.page_token, identity, params.history), source: 'feishu_api' as const, content_trust: 'untrusted_source_data' as const };
   }
   async document(identity: Identity, documentId: string) {
     id.parse(documentId);

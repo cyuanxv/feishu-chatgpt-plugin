@@ -1,5 +1,13 @@
 # Validation record
 
+## Twelfth slice, reviewed read-only branch integration
+
+Version `0.1.0-dev.12` combines the default-disabled agenda HTTP/issuer candidates from PRs 6–7 with the message-search filters from PR 8. The combined source preserves both histories; no live configuration, OAuth grant, credentials, private data or deployment is included.
+
+The new filter slice passed 416 tests before integration and independent review added 504 precision/offset checks across four entry points. That review found and corrected silent subsecond time truncation, including sub-millisecond values. The merged candidate retains all existing agenda/issuer tests and all 47 search-filter regressions. Integration review additionally reproduced stale authorization across retry backoff. The gateway now revalidates authorization and token expiry before every transport attempt, with 12 regressions for revocation, closed requests, lost scope, expiry, invalid credentials, refreshed tokens and retry limits. The combined cloud suite passes 539 tests, with five native PostgreSQL cases explicitly skipped locally. Final native PostgreSQL, Docker and exact-commit CI results are recorded in the integration PR; a skipped native database test is never represented as a local pass.
+
+No GitHub workflow deploys a service or pushes a container image. Production startup still requires explicit provider/issuer gates and reviewed secure configuration. Green source integration does not establish real OAuth or ChatGPT readiness.
+
 ## Eleventh slice, single-agenda browser/issuer candidate
 
 `0.1.0-dev.11` has 480 passing local tests across twenty active files, plus five explicitly skipped native PostgreSQL concurrency cases awaiting CI. Typecheck, build, both compiled default-disabled entrypoint smoke checks and source allowlist checks are required for this cut. New tests cover browser-bound provider state, confidential-client v3/S256, verified tenant/user identity, explicit same-origin CSRF-protected consent, exact OAuth client/redirect/resource binding, durable code/token replay, refresh-family revocation and HTTP agenda reads with separate provider credentials. The full browser-to-agenda test creates grants through the candidate flow rather than SQL seeding.

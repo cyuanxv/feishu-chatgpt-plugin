@@ -1,14 +1,28 @@
 import { z } from 'zod';
 import { digest, DomainError, Handles, requireScope, type Identity } from '../../policy/src/core.js';
-import { FeishuProviderReads } from './provider-reads.js';
+import { assertMessageSearchTimePrecision, FeishuProviderReads } from './provider-reads.js';
 import { FeishuProviderDomains } from './provider-domains.js';
 import { FeishuSdkReadGateway } from './sdk-reads.js';
 import { FeishuProviderBases } from './provider-bases.js';
 import { FeishuProviderAgenda } from './provider-agenda.js';
 
 const id = z.string().min(1).max(256).regex(/^[A-Za-z0-9_-]+$/);
-const searchInput = z.object({ query: z.string().trim().min(1).refine(value => Array.from(value).length <= 30, 'Unified search supports at most 30 Unicode characters.'), types: z.array(z.enum(['doc', 'wiki', 'message', 'file', 'base'])).min(1).max(5).default(['doc', 'wiki', 'message']), page_size: z.number().int().min(1).max(20).default(20), cursor: z.string().min(1).max(4096).optional() }).strict();
+const searchInput = z.object({
+  query: z.string().trim().min(1).refine(value => Array.from(value).length <= 30, 'Unified search supports at most 30 Unicode characters.'),
+  types: z.array(z.enum(['doc', 'wiki', 'message', 'file', 'base'])).min(1).max(5).default(['doc', 'wiki', 'message']),
+  owner: id.optional(), chat_id: id.optional(),
+  time_range: z.object({ start: z.iso.datetime({ offset: true }), end: z.iso.datetime({ offset: true }) }).strict().refine(value => Date.parse(value.end) > Date.parse(value.start) && Date.parse(value.end) - Date.parse(value.start) <= 366 * 86_400_000, 'Time range must be ordered and at most 366 days.').optional(),
+  page_size: z.number().int().min(1).max(20).default(20), cursor: z.string().min(1).max(4096).optional(),
+}).strict();
 type SearchInput = z.input<typeof searchInput>;
+/** Owner means message sender here. Do not reinterpret document ownership as creator IDs or drop domains. */
+export function assertSupportedSearchFilters(input: Pick<SearchInput, 'types' | 'owner' | 'chat_id' | 'time_range'>): void {
+  if ((input.owner !== undefined || input.chat_id !== undefined || input.time_range !== undefined) &&
+      (!input.types?.length || input.types.some(type => type !== 'message'))) {
+    throw new DomainError('UNSUPPORTED_CAPABILITY', 'Owner, chat and time filters currently require types=["message"]. Owner is the sender open_id; document and Base filters are not yet supported.');
+  }
+  assertMessageSearchTimePrecision(input.time_range);
+}
 interface SearchHit { result_id: string; type: 'doc' | 'wiki' | 'message' | 'file' | 'base'; title: string; snippet: string; url: string | null }
 const commentCursorSchema = z.object({ operation: z.enum(['comments', 'comment_replies']), documentId: id, commentId: id.optional(), pageSize: z.number().int().min(1).max(50), upstream: z.string().min(1).nullable(), history: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(20) });
 type CommentCursor = z.infer<typeof commentCursorSchema>;
@@ -22,13 +36,13 @@ export class FeishuProviderWorkflows {
   }
   async search(identity: Identity, input: SearchInput) {
     requireScope(identity, 'search.read');
-    const parsed = searchInput.parse(input); const types = [...new Set(parsed.types)];
+    const parsed = searchInput.parse(input); assertSupportedSearchFilters(parsed); const types = [...new Set(parsed.types)];
     const scope = (type: typeof types[number]) => type === 'message' ? 'im.read' : type === 'base' ? 'base.read' : 'docs.read';
     const missing = [...new Set(types.filter(type => !identity.scopes.includes(scope(type))).map(scope))];
     const allowed = types.filter(type => identity.scopes.includes(scope(type)));
     const domains = [...(allowed.some(type => !['message', 'base'].includes(type)) ? ['docs'] : []), ...(allowed.includes('message') ? ['messages'] : []), ...(allowed.includes('base') ? ['bases'] : [])];
     if (!domains.length) throw new DomainError('INSUFFICIENT_SCOPE', 'No requested search domain is authorized.', missing[0]);
-    const query = { query: parsed.query, types, page_size: parsed.page_size, domains, scopes: [...identity.scopes].sort() };
+    const query = { query: parsed.query, types, owner: parsed.owner, chat_id: parsed.chat_id, time_range: parsed.time_range, page_size: parsed.page_size, domains, scopes: [...identity.scopes].sort() };
     const fingerprint = digest(JSON.stringify(query));
     let index = 0; let upstream: string | undefined;
     if (parsed.cursor) {
@@ -50,7 +64,12 @@ export class FeishuProviderWorkflows {
         });
         upstream = page.next_cursor ?? undefined;
       } else if (domains[index] === 'messages') {
-        const page = await this.reads.searchMessages(identity, { query: parsed.query }, { page_size: parsed.page_size, cursor: upstream });
+        const page = await this.reads.searchMessages(identity, {
+          query: parsed.query,
+          ...(parsed.owner ? { sender_open_id: parsed.owner } : {}),
+          ...(parsed.chat_id ? { chat_id: parsed.chat_id } : {}),
+          ...(parsed.time_range ? { start: parsed.time_range.start, end: parsed.time_range.end } : {}),
+        }, { page_size: parsed.page_size, cursor: upstream });
         results = page.messages.map(result => ({ result_id: this.handles.encode('resource', identity, { provider: 'feishu', kind: 'message', id: result.message_id }), type: 'message', title: result.snippet.slice(0, 80), snippet: result.snippet, url: null }));
         upstream = page.next_cursor ?? undefined;
       } else {

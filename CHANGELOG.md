@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.12
+
+- Integrate the previously reviewed default-disabled agenda HTTP/OAuth candidates with the message-search filter branch while preserving both histories.
+- Support sender, chat and whole-second time filters for explicit message-only unified searches; bind every filter to continuation.
+- Reject malformed and oversized message pages, duplicate or invalid IDs and fractional-second bounds, including sub-millisecond fractions.
+- Add 47 message-search contract tests and 12 retry-authorization regressions; retain native PostgreSQL/container CI.
+- Revalidate current grant/request state and provider-token expiry before every retry; never reuse a cached authorization decision across backoff.
+- Keep provider/issuer runtime gates disabled by default, all thirteen writes closed and real account/ChatGPT acceptance explicitly unverified.
+
 ## 0.1.0-dev.11
 
 - Added a separate, default-disabled Feishu browser login and single-agenda OAuth issuer candidate using official v3 token and user_info contracts
