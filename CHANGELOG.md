@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.14
+
+- Add a separate default-off document confirmation UI with full title/Markdown/folder preview, verified account display, expiry and explicit confirm/cancel actions.
+- Require an independent one-use Ed25519 host browser handoff in addition to existing MCP authorization; keep the host signer outside the review service.
+- Add short-lived server-side cookie/CSRF sessions bound to account, site, intent and content, with current grant/generation checks before every action.
+- Reuse durable at-most-once create/receipt semantics, serialize cross-window cancellation, and handle lost responses, repeated clicks, navigation, BFCache and expiry without automatic re-creation.
+- Package UI assets into the build and test default-disabled compiled/container startup, HTTP/client behavior, native PostgreSQL race fences and sandboxed synthetic browser CI.
+- Keep actual host delivery, docs.write issuance, live provider acceptance and production deployment explicitly unimplemented/unverified activation gates.
+
 ## 0.1.0-dev.13
 
 - Add an unmounted, default-off create_doc workflow with typed text-only Markdown preview, trusted-host confirmation, durable idempotency and receipts.
