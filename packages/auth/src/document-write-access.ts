@@ -16,7 +16,8 @@ const rowSchema = z.object({
 });
 /** Separate, unmounted write verifier. Existing calendar OAuth never grants docs.write. */
 export class PostgresDocumentWriteAccess implements DocumentWriteAccess {
-  constructor(private readonly db: Pick<Pool, 'query'>, private readonly store: Pick<TokenStore, 'snapshot'>, private readonly resource: string) {
+  constructor(private readonly db: Pick<Pool, 'query'>, private readonly store: Pick<TokenStore, 'snapshot'>, private readonly resource: string, private readonly operation: 'create_doc'|'create_task' = 'create_doc') {
+    if(!['create_doc','create_task'].includes(operation))throw new Error('Unsupported write operation.');
     const url = new URL(resource);
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/mcp' || url.href !== resource) throw new Error('An exact HTTPS MCP resource is required.');
   }
@@ -42,8 +43,9 @@ export class PostgresDocumentWriteAccess implements DocumentWriteAccess {
     const parsed = rows.length === 1 ? rowSchema.safeParse(rows[0]) : null;
     if (!parsed?.success || parsed.data.expires_ms <= Date.now()) throw new DomainError('AUTH_REQUIRED', 'Valid write authorization is required.');
     const row = parsed.data;
-    if (!row.scopes.includes('docs.write')) throw new DomainError('INSUFFICIENT_SCOPE', 'Explicit document-write authorization is required.', 'docs.write');
-    if (DOCUMENT_CREATE_PROVIDER_SCOPES.some(scope => !row.provider_scopes.includes(scope))) throw new DomainError('PERMISSION_DENIED', 'The current Feishu grant lacks document-create permission.');
+    const logicalScope=this.operation==='create_doc'?'docs.write':'task.write';
+    if (!row.scopes.includes(logicalScope)) throw new DomainError('INSUFFICIENT_SCOPE', 'Explicit write authorization is required.', logicalScope);
+    if (this.operation==='create_doc'?DOCUMENT_CREATE_PROVIDER_SCOPES.some(scope => !row.provider_scopes.includes(scope)):!['task:task:write','task:task:writeonly'].some(scope=>row.provider_scopes.includes(scope))) throw new DomainError('PERMISSION_DENIED', 'The current Feishu grant lacks the requested create permission.');
     return { identity: { subject: row.subject, tenantId: row.tenant_id, connectionId: row.connection_id, domain: row.domain, scopes: row.scopes }, grantId: row.grant_id, generation: row.generation, clientId: row.client_id, resource: row.resource };
   }
   async token(bearer: string, initial: DocumentWritePrincipal): Promise<FeishuTokens> {

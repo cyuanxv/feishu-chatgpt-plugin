@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-dev.15
+
+- Add default-off unfinished/unassigned task creation with full title/description preview and optional explicit timed or UTC all-day deadline.
+- Use the official Task v2 SDK operation with user-token authorization, a stable server client_token and no recipient/list/reminder properties.
+- Add a separate durable task ledger and task-specific confirmation handoff/session, reusing the reviewed browser safety behavior without allowing document/task proof or grant confusion.
+- Preserve at-most-once execution beyond provider's five-minute dedupe window; surface known partial tasks and ambiguous results without corrective writes or automatic re-creation.
+- Add provider, workflow, HTTP, shared-client, native PostgreSQL and sandboxed browser regressions while retaining document behavior.
+- Keep actual task grants, host delivery, real provider validation and live deployment closed/unverified.
+
 ## 0.1.0-dev.14
 
 - Add a separate default-off document confirmation UI with full title/Markdown/folder preview, verified account display, expiry and explicit confirm/cancel actions.

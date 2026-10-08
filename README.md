@@ -2,7 +2,7 @@
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.
 
-Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.14`
+Repository owner: `cyuanxv` · License: MIT · Version: `0.1.0-dev.15`
 
 ## Current safety boundary
 
@@ -76,6 +76,10 @@ The `ProviderReadRouter` routes all 17 reads through the shared input/policy/aud
 A separate default-off `create_doc` workflow now implements full-content preview, trusted-host confirmation attestation, durable local at-most-once execution and async receipts using the pinned official CLI protocol. It does not register a live write tool or expand current OAuth scopes. Ambiguous POST results are never recreated automatically; warning-bearing documents remain partial and content is not read-back verified. See [the precise contract and remaining activation gates](docs/document-create-candidate.md). The twelve other planned writes are unaffected.
 
 The dev14 confirmation UI adds the full preview, explicit confirm/cancel and receipt screens, protected by a one-use independent host attestation and short-lived account-bound browser session. It remains default off. The real host delivery adapter and document-write OAuth issuance are still activation gates, not completed live integrations. See [the UI boundary and tests](docs/document-review-candidate.md).
+
+## Task-create candidate
+
+The separate default-off `create_task` flow previews a full task title/description plus an optional timed or all-day deadline, then requires explicit user confirmation before a single durable create attempt. It creates an unfinished, unassigned task under the current user identity, with no added assignees, followers or task-list placement. Provider ambiguity and incomplete receipts never trigger automatic re-creation, even after the provider's five-minute idempotency window. [Scope, official evidence and activation gates](docs/task-create-candidate.md).
 
 ## Next verified milestones
 

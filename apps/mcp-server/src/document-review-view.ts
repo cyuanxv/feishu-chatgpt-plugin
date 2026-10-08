@@ -4,7 +4,7 @@ import type { DocumentReviewSession } from '../../../packages/auth/src/document-
 const escape=(value:string)=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
 const json=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
 export function renderDocumentReview(input:CreateDocumentInput,session:DocumentReviewSession,csrf:string,allowCreate:boolean):string {
-  const data={version:1,intent_id:session.intent_id,request_hash:session.request_hash,csrf,input,expires_at:session.expires_ms,server_now:Date.now(),allow_create:allowCreate};
+  const data={version:1,operation:'create_doc',intent_id:session.intent_id,request_hash:session.request_hash,csrf,input,expires_at:session.expires_ms,server_now:Date.now(),allow_create:allowCreate};
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>确认创建飞书文档</title><link rel="stylesheet" href="/document-review/assets/review.css"><script src="/document-review/assets/review.js" defer></script></head><body>
   <div class="shell"><header class="top"><div><span class="brand">文档确认</span><span class="badge">独立集成 · 开发候选</span></div><span id="expiry" class="expiry">正在核验预览有效期</span></header>
   <main><div class="intro"><p class="eyebrow">CREATE DOCUMENT</p><h1>最后检查一下，再创建。</h1><p>请确认目标账户、目录和完整正文。只有点击确认后才会提交创建请求。</p></div>
