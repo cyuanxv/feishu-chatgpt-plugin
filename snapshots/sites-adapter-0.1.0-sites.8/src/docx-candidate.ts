@@ -17,6 +17,20 @@ export const DOCX_CANDIDATE_SCOPES = {
 } as const;
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 const opaque = z.string().min(1).max(4000);
+// In Unicode mode, paired surrogates are one non-BMP codepoint; this range
+// matches only isolated UTF-16 surrogate code units.
+const unicodeText = z
+  .string()
+  .refine((value) => !/[\uD800-\uDFFF]/u.test(value));
+function boundedPreview(value: string, maxUnits: number): string {
+  let result = "";
+  for (const point of value.replace(/<\/?h[b]?>/g, "")) {
+    if (result.length + point.length > maxUnits) break;
+    result += point;
+  }
+  return result;
+}
+
 const searchInput = z
   .object({
     query: z
@@ -39,7 +53,7 @@ const resource = z
   .object({
     kind: z.literal("docx"),
     id,
-    title: z.string().max(256),
+    title: unicodeText.max(256),
     expires: z.number().finite(),
     scopes: z.string(),
   })
@@ -238,8 +252,8 @@ export class DocxCandidate {
             z.object({
               entity_type: z.string(),
               result_meta: z.object({ token: id, doc_types: z.string() }),
-              title_highlighted: z.string().max(1000).optional(),
-              summary_highlighted: z.string().max(4000).optional(),
+              title_highlighted: unicodeText.max(1000).optional(),
+              summary_highlighted: unicodeText.max(4000).optional(),
             }),
           )
           .max(input.page_size),
@@ -265,9 +279,7 @@ export class DocxCandidate {
     );
     const results = [];
     for (const item of page.data.res_units) {
-      const title = (item.title_highlighted ?? "")
-        .replace(/<\/?h[b]?>/g, "")
-        .slice(0, 256);
+      const title = boundedPreview(item.title_highlighted ?? "", 256);
       results.push({
         result_id: await this.seal(
           { kind: "docx", id: item.result_meta.token, title, expires, scopes },
@@ -277,9 +289,7 @@ export class DocxCandidate {
         ),
         type: "docx",
         title,
-        snippet: (item.summary_highlighted ?? "")
-          .replace(/<\/?h[b]?>/g, "")
-          .slice(0, 512),
+        snippet: boundedPreview(item.summary_highlighted ?? "", 512),
       });
     }
     let next: string | null = null;

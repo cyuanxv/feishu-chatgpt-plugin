@@ -31,6 +31,10 @@ experiment as part of this candidate.
   results, unknown types and duplicate document IDs are rejected without fallback.
 - Upstream URLs are never returned or fetched; only the fixed official search and
   raw-content paths are used. No arbitrary URL input or provider redirects.
+- Search titles and snippets use UTF-16 code-unit budgets of 256 and 512. Truncation
+  accumulates whole Unicode codepoints and never splits a surrogate pair; isolated
+  surrogate units in provider titles/snippets are rejected. The encrypted title claim
+  uses the same 256-unit limit.
 - Result IDs use AES-GCM and bind Site, owner, current grant and permission fingerprint.
   They remain reusable for ten minutes, but are not deterministic across searches.
 - Search cursors also bind query/page size, expire without sliding renewal, and track
@@ -53,7 +57,13 @@ The Node adapter's bounded search/result/cursor contract is reusable. Its Node S
 crypto handles and PostgreSQL/auth broker wiring are not imported into Workers. This
 candidate uses fixed fetch-compatible HTTP and the existing Workers WebCrypto Vault.
 
-Before live integration: verify raw-content permission evidence for the target app;
+The module itself does not implement a verified live-enable gate. Its current safety
+boundary is exclusion from production imports/registration and unchanged production
+scopes, plus mandatory test-supplied transport. Tests cannot establish production
+database fencing atomicity.
+
+Before live integration: verify the exact raw-content endpoint, minimum scope and
+user-token behavior for the target app;
 obtain explicit authorization for the additional read scopes; adapt the production grant
 resolver without weakening fencing; implement approved scope negotiation and per-tool
 registration; decide partial-domain behavior; and run real-account end-to-end acceptance.
@@ -67,8 +77,8 @@ No Wiki, IM, Base, write tools, new credentials or deployment are part of this c
 Run from this snapshot directory:
 
 - `npm run typecheck`
-- `npm test` (193 passing: 169 baseline and 24 new candidate regressions)
-- `node scripts/check-docx-workerd.mjs` (seven native Workers checks)
+- `npm test` (206 passing: 169 baseline and 37 candidate regressions)
+- `node scripts/check-docx-workerd.mjs` (nine native Workers checks)
 - Existing package/source, workerd, OAuth-wire and native-HTTP checks
 
 The production Worker bundle must remain byte-for-byte identical to the frozen sites.9

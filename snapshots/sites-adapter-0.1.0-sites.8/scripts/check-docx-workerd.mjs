@@ -15,7 +15,7 @@ export default {async fetch(){
  const p={site:'https://synthetic.example.test',user:'synthetic-owner'};
  const api=new DocxCandidateProvider(async(url,init)=>{
   calls.push({url,method:init.method,redirect:init.redirect});
-  if(url.endsWith('/search/v2/doc_wiki/search'))return Response.json({code:0,data:{res_units:[{entity_type:'DOC',result_meta:{token:'doc1',doc_types:'DOCX'},title_highlighted:'Synthetic'}],has_more:false}});
+  if(url.endsWith('/search/v2/doc_wiki/search'))return Response.json({code:0,data:{res_units:[{entity_type:'DOC',result_meta:{token:'doc1',doc_types:'DOCX'},title_highlighted:'a'.repeat(255)+'😀',summary_highlighted:'b'.repeat(511)+'😀'}],has_more:false}});
   return Response.json({code:0,data:{content:'甲😀乙'}});
  });
  const service=new DocxCandidate(api,async()=>({grant:'synthetic-grant',scopes:['search:docs:read','docx:document:readonly'],token:'synthetic-token'}),new Vault(random()));
@@ -25,7 +25,7 @@ export default {async fetch(){
  const second=await service.fetch(p,{result_id,max_chars:2,cursor:first.next_cursor});
  let isolated=false;
  try{await service.fetch({...p,user:'other-owner'},{result_id});}catch{isolated=true;}
- return Response.json({first,second,calls,isolated});
+ return Response.json({first,second,calls,isolated,preview:found.results[0]});
 }};`,
     resolveDir: process.cwd(),
     sourcefile: "docx-workerd-fixture.ts",
@@ -53,6 +53,8 @@ try {
   assert.equal(result.first.truncated, true);
   assert.equal(result.second.content, "乙");
   assert.equal(result.second.next_cursor, null);
+  assert.equal(result.preview.title, "a".repeat(255));
+  assert.equal(result.preview.snippet, "b".repeat(511));
   assert.equal(result.isolated, true);
   assert.equal(result.calls.length, 3);
   assert(
@@ -66,7 +68,7 @@ try {
     JSON.stringify({
       runtime: "official Miniflare/workerd",
       candidate_only: true,
-      passed: 7,
+      passed: 9,
       real_provider_requests: 0,
       production_registration_changed: false,
     }),

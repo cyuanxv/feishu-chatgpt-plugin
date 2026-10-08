@@ -373,3 +373,122 @@ test("production worker still lists only get_agenda and denies candidate tool na
     );
   assert.equal(s.mocked.calls.length, 0);
 });
+for (const [title, summary, expectedTitle, expectedSummary] of [
+  [
+    "a".repeat(255) + "😀",
+    "b".repeat(511) + "😀",
+    "a".repeat(255),
+    "b".repeat(511),
+  ],
+  [
+    "a".repeat(254) + "😀",
+    "b".repeat(510) + "😀",
+    "a".repeat(254) + "😀",
+    "b".repeat(510) + "😀",
+  ],
+  ["😀".repeat(129), "😀".repeat(257), "😀".repeat(128), "😀".repeat(256)],
+  [
+    "<h>" + "a".repeat(255) + "😀</h>",
+    "<hb>" + "b".repeat(511) + "😀</hb>",
+    "a".repeat(255),
+    "b".repeat(511),
+  ],
+])
+  test(
+    "search previews preserve surrogate pairs within UTF-16 budgets: " +
+      title.length +
+      "/" +
+      summary.length,
+    async () => {
+      const s = setup();
+      s.hooks.search = {
+        res_units: [
+          hit("doc1", {
+            title_highlighted: title,
+            summary_highlighted: summary,
+          }),
+        ],
+        has_more: false,
+      };
+      const found = await s.service.search(P, { query: "x" }),
+        result = found.results[0];
+      assert.equal(result.title, expectedTitle);
+      assert.equal(result.snippet, expectedSummary);
+      assert(result.title.length <= 256);
+      assert(result.snippet.length <= 512);
+      assert(result.title.isWellFormed());
+      assert(result.snippet.isWellFormed());
+      const document = await s.service.fetch(P, {
+        result_id: result.result_id,
+      });
+      assert.equal(document.title, expectedTitle);
+      assert(document.title.isWellFormed());
+    },
+  );
+test("search rejects provider title and summary containing isolated surrogates", async () => {
+  for (const patch of [
+    { title_highlighted: "bad\ud83d" },
+    { summary_highlighted: "bad\ude00" },
+  ]) {
+    const s = setup();
+    s.hooks.search = { res_units: [hit("doc1", patch)], has_more: false };
+    await assert.rejects(s.service.search(P, { query: "x" }), {
+      code: "provider_invalid_response",
+    });
+  }
+});
+for (const operation of ["search", "fetch"])
+  for (const race of ["disconnect", "grant", "scope"])
+    test(`${operation} suppresses output after in-flight ${race} change`, async () => {
+      const s = setup(),
+        result_id = operation === "fetch" ? await reference(s) : null;
+      s.hooks.transport = () => {
+        if (race === "disconnect") s.disconnect();
+        else if (race === "grant") s.changeGrant();
+        else s.changeScopes([...scopes, "additional"]);
+        return Response.json({
+          code: 0,
+          data:
+            operation === "search"
+              ? { res_units: [hit()], has_more: false }
+              : { content: "Synthetic content" },
+        });
+      };
+      await assert.rejects(
+        operation === "search"
+          ? s.service.search(P, { query: "x" })
+          : s.service.fetch(P, { result_id }),
+        {
+          code: {
+            disconnect: "authorization_required",
+            grant: "connection_changed",
+            scope: "scope_changed",
+          }[race],
+        },
+      );
+    });
+for (const [label, p] of [
+  ["owner", { ...P, user: "other" }],
+  ["Site", { ...P, site: "https://other.example.test" }],
+])
+  test(`search cursor rejects another ${label} before transport`, async () => {
+    const s = setup();
+    s.hooks.search = {
+      res_units: [],
+      has_more: true,
+      page_token: "synthetic-next",
+    };
+    const found = await s.service.search(P, { query: "x" }),
+      before = s.calls.length;
+    const service = new DocxCandidate(
+      s.provider,
+      async () => ({ grant: "grant1", scopes, token: "synthetic-access" }),
+      s.vault,
+      () => 100000,
+    );
+    await assert.rejects(
+      service.search(p, { query: "x", cursor: found.next_cursor }),
+      { code: "invalid_reference" },
+    );
+    assert.equal(s.calls.length, before);
+  });
