@@ -7,3 +7,4 @@ export * from "./agenda.ts";
 export * from "./provider-diagnostics.ts";
 export * from "./oauth-wire.ts";
 export { createWorker, TOOL } from "./worker.ts";
+export * from "./docx-candidate.ts";
