@@ -23,7 +23,7 @@ The accepted PRD enumerates **30 tools**, despite its “29 tools” heading. Al
 | get_task | M12 | task.read | Mock handler, input/output contract, automated test |
 | send_message | M14 | Not enabled | Not registered; rejection test |
 | reply_message | M14 | Not enabled | Not registered; rejection test |
-| create_doc | M15 | Not enabled | Not registered; rejection test |
+| create_doc | M15 | Not enabled | Default-off preview/confirmation/idempotency/receipt candidate; not registered |
 | update_doc | M15 | Not enabled | Not registered; rejection test |
 | add_doc_comment | M15 / P1 | Not enabled | Not registered; rejection test |
 | create_base_record | M16 | Not enabled | Not registered; rejection test |
@@ -42,3 +42,5 @@ Tool outputs are structured validated envelopes. The current output schema valid
 ## Provider message-search filters (dev.10)
 
 The internal provider `search` workflow accepts `owner`, `chat_id` and `time_range` only with explicit `types: ["message"]`. `owner` means sender open ID, not document creator. The time window must use whole-second boundaries (including `.000Z`); fractional-second bounds are rejected rather than silently rounded. The accepted window is serialized into the existing IM search API in Unix seconds. Provider-side boundary inclusion and returned timestamp units remain unverified against a real tenant. Queries remain offset-aware and bounded to 366 days; no new endpoint or permission is used. Filtered cursors bind all three constraints, query, page size, selected domains, connection and scope set. Unsupported mixed-domain filters fail before transport. These behaviors are tested with injected synthetic transport, not a real account. The HTTP listener remains synthetic.
+
+The dev.13 document-create candidate implements one write workflow offline; it does not activate it or complete the other twelve writes. See [document-create boundaries](document-create-candidate.md).

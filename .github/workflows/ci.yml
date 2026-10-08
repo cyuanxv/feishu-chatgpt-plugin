@@ -62,6 +62,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npx vitest run tests/issuer-native-pg.test.ts
+      - run: npx vitest run tests/issuer-native-pg.test.ts tests/document-write-native-pg.test.ts
         env:
           FEISHU_CI_POSTGRES: '1'
