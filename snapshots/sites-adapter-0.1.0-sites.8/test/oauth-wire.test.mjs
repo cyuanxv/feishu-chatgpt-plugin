@@ -40,7 +40,7 @@ const authorization = () => {
 const tokenRequest = () => ({
   method: "POST",
   headers: { "Content-Type": TOKEN_CONTENT_TYPE },
-  body: new URLSearchParams({
+  body: JSON.stringify({
     client_id: binding.clientId,
     client_secret: secret,
     grant_type: "authorization_code",
@@ -48,7 +48,7 @@ const tokenRequest = () => ({
     redirect_uri: binding.redirectUri,
     code_verifier: verifier,
     scope: binding.scope,
-  }).toString(),
+  }),
 });
 const expected = { code, verifier, clientSecret: secret };
 
@@ -132,9 +132,9 @@ for (const key of [
 ]) {
   test("final token form rejects changed " + key, async () => {
     const request = tokenRequest();
-    const p = new URLSearchParams(request.body);
+    const p = new URLSearchParams(JSON.parse(request.body));
     p.set(key, "SENSITIVE_tampered");
-    request.body = p.toString();
+    request.body = JSON.stringify(Object.fromEntries(p));
     await assert.rejects(
       () => checkTokenWire(TOKEN_ENDPOINT, request, binding, expected),
       { code: "oauth_wire_mismatch" },
@@ -144,7 +144,7 @@ for (const key of [
 test("final token form rejects duplicates, incorrect media type, method, and endpoint", async () => {
   for (const alter of [
     (r) => (r.body += "&code_verifier=" + verifier),
-    (r) => (r.headers["Content-Type"] = "application/json"),
+    (r) => (r.headers["Content-Type"] = "application/x-www-form-urlencoded"),
     (r) => (r.method = "GET"),
   ]) {
     const r = tokenRequest();

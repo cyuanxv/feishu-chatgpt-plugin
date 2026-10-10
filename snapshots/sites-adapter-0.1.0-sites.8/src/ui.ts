@@ -32,6 +32,7 @@ async function refresh(){
   detail.textContent=value.configured?'连接后可在 ChatGPT 使用日程读取工具':'正在等待安全配置';
   connect.disabled=!value.configured;connect.textContent=value.connected?'重新连接飞书':'连接飞书';
   disconnect.hidden=!value.grant_id;
+  demo.hidden=!value.connected;demo.textContent="查看未来 7 天日程";
 }
 async function action(path,body){
   if(busy||!snapshot||snapshot.data_mode==='synthetic')return;
@@ -44,7 +45,8 @@ async function action(path,body){
   finally{busy=false;disconnect.disabled=false;if(snapshot)connect.disabled=!snapshot.configured;}
 }
 async function showDemo(){
-  if(busy||snapshot?.data_mode!=='synthetic')return;
+  if(busy||!snapshot)return;
+  if(snapshot.data_mode!=='synthetic')return showAgenda();
   busy=true;demo.disabled=true;
   try{
     const start=new Date();start.setUTCHours(0,0,0,0);
@@ -52,6 +54,20 @@ async function showDemo(){
     const data=await readJSON(response,'演示暂时不可用，请刷新后重试');
     if(data?.source!=='synthetic_fixture'||!Array.isArray(data.events))throw Error('演示暂时不可用，请刷新后重试');
     result.textContent=data.notice+' '+data.events.map(event=>event.summary+' '+event.start+' – '+event.end).join('；');
+  }catch(error){result.textContent=error.message;}
+  finally{busy=false;demo.disabled=false;}
+}
+async function showAgenda(){
+  if(!snapshot?.connected)return;
+  busy=true;demo.disabled=true;
+  try{
+    const start=new Date();
+    const response=await fetch('/api/agenda',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({time_range:{start:start.toISOString(),end:new Date(start.getTime()+7*86400000).toISOString()},timezone:'Asia/Shanghai',page_size:20})});
+    if(!response.ok){const failure=await response.json().catch(()=>({}));const label=/^[a-z_]{1,80}$/.test(failure.error)?failure.error:'read_failed';throw Error('飞书读取失败：'+label+'（HTTP '+response.status+'）');}
+    const data=await readJSON(response,'飞书日程读取失败，请稍后重试或重新连接');
+    if(!Array.isArray(data.events))throw Error('飞书返回格式异常');
+    const stamp=t=>t.date||new Date(Number(t.timestamp)*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});
+    result.textContent='已从飞书云端读取。'+(data.events.length?data.events.map(e=>(e.summary||'无标题日程')+' '+stamp(e.start)).join('；'):'本页没有日程。')+(data.partial?' 结果尚不完整，请在聊天中继续分页读取。':' 已完成本次范围检查。');
   }catch(error){result.textContent=error.message;}
   finally{busy=false;demo.disabled=false;}
 }

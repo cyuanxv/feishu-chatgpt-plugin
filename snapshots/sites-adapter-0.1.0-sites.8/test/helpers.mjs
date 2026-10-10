@@ -71,14 +71,14 @@ export function mock() {
   const fetcher = async (url, init = {}) => {
     calls.push({ url, init });
     if (hooks.before) await hooks.before(url, init);
-    if (url === "https://accounts.feishu.cn/oauth/v3/token") {
+    if (url === "https://open.feishu.cn/open-apis/authen/v2/oauth/token") {
       assert.equal(init.method, "POST");
       assert.equal(
         init.headers["Content-Type"],
-        "application/x-www-form-urlencoded",
+        "application/json; charset=utf-8",
       );
       assert(!init.headers.Authorization);
-      const params = new URLSearchParams(init.body);
+      const params = new URLSearchParams(JSON.parse(init.body));
       assert.equal(params.get("client_id"), "synthetic-app");
       assert.equal(params.get("client_secret"), "synthetic-app-secret");
       assert(

@@ -1,10 +1,10 @@
-# Feishu Sites adapter: 0.1.0-sites.9 candidate
+# Feishu Sites adapter: 0.1.0-sites.13
 
-This branch is the unpublished 0.1.0-sites.9 follow-on candidate adding safe read-error diagnostics and MCP correlation receipts. The directory name is the historical snapshot path, not a newly deployed release. See [candidate validation](docs/READ-DIAGNOSTICS.md). No real-account OAuth success or fix for error 20049 is claimed.
+Cloud-hosted, owner-private calendar reader. The historical snapshot directory is retained for compatibility. This adapter runs in Sites / Cloudflare Workers with D1; it needs no local stdio process, tunnel, or running personal computer.
 
-This directory preserves the standalone TypeScript/Cloudflare Workers adapter at package version **0.1.0-sites.8**. It is separate from the repository's Node/PostgreSQL implementation and is not wired into the root build or deployment.
+The 2026-10-11 repair resolves a reproduced OAuth 20049 failure by pairing the authorization endpoint with the documented PKCE-compatible v2 token endpoint and JSON request encoding. Real-account authorization and encrypted grant persistence succeeded after deployment. Native chat and browser agenda reads both returned 7 real events with complete traversal and no errors.
 
-The adapter exposes one read-only MCP tool, `get_agenda`, and a small connection UI. It does not expose the broader Node tool catalog or document/task write workflows. This source snapshot is not a claim of successful real-account OAuth, resolved provider error 20049, or production readiness.
+Only `get_agenda` is exposed. DOCX and device-flow candidates remain separate; they are not represented as completed live features. See [repair evidence and limitations](docs/CLOUD-OAUTH-REPAIR.md).
 
 ## Included implementation
 
@@ -16,7 +16,7 @@ The adapter exposes one read-only MCP tool, `get_agenda`, and a small connection
 - Synthetic mode that blocks real OAuth and provider transport
 - D1 schema/migrations, build scripts, locked dependencies and synthetic unit/workerd/HTTP/served-script tests
 
-Only the connection homepage uses `Referrer-Policy: same-origin`; redirects and callback/error pages retain `no-referrer`. Opaque, absent and foreign Origin values remain rejected. Protocol endpoints and security logic are preserved; publishing this snapshot does not introduce an alternate provider endpoint.
+Only the connection homepage uses `Referrer-Policy: same-origin`; redirects and callback/error pages retain `no-referrer`. Opaque, absent and foreign Origin values remain rejected. PKCE, state, browser binding, encryption, and one-use callback protections remain enabled. No fallback silently removes PKCE.
 
 ## Run the synthetic checks
 

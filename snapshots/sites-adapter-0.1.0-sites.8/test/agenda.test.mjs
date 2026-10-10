@@ -203,3 +203,15 @@ test("public origin mismatches, query bearer and malformed bodies fail closed", 
   );
   assert.equal(response.status, 413);
 });
+
+test("provider calendar listing uses the documented minimum page size",async()=>{
+ const s=await setup();await s.grant();await s.tool(ARGS);
+ const call=s.mocked.calls.find(c=>c.url.includes('/calendar/v4/calendars?'));
+ assert.equal(new URL(call.url).searchParams.get('page_size'),'50');
+});
+
+test("standard MCP request metadata does not become tool arguments or identity",async()=>{
+ const s=await setup();await s.grant();
+ const response=await s.send('/mcp',{method:'POST',body:{jsonrpc:'2.0',id:99,method:'tools/call',params:{name:'get_agenda',arguments:ARGS,_meta:{progressToken:'safe',user:'different-user'}}}});
+ const data=await response.json();assert.notEqual(data.result.isError,true);assert(data.result.structuredContent.events.length>0);
+});

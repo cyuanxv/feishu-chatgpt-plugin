@@ -227,14 +227,14 @@ try {
     .bind(Date.now() - 1, P.site, P.user)
     .run();
   const countBefore = provider.calls.filter((c) =>
-    c.url.endsWith("/oauth/v3/token"),
+    c.url.endsWith("/authen/v2/oauth/token"),
   ).length;
   const refreshResults = await Promise.all(
     Array.from({ length: 12 }, () => call()),
   );
   assert(refreshResults.some((r) => r.result.isError === false));
   assert.equal(
-    provider.calls.filter((c) => c.url.endsWith("/oauth/v3/token")).length,
+    provider.calls.filter((c) => c.url.endsWith("/authen/v2/oauth/token")).length,
     countBefore + 1,
   );
   assert.equal((await store.get(P)).lease, null);

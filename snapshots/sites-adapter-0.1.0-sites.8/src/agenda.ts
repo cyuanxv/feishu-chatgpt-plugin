@@ -75,7 +75,7 @@ interface State {
 const stateSchema = z.object({
   fingerprint: z.string(),
   grant: z.string(),
-  calendars: z.array(id).max(5),
+  calendars: z.array(id).max(20),
   directory: z.string().max(2000).nullable(),
   started: z.boolean(),
   seen: z.array(z.string()).max(20),
@@ -153,7 +153,7 @@ export class Agenda {
         directoryReads++;
         const directory = z
           .object({
-            calendar_list: z.array(z.object({ calendar_id: id })).max(5),
+            calendar_list: z.array(z.object({ calendar_id: id })).max(50),
             has_more: z.boolean(),
             page_token: z.string().max(2000).optional(),
           })

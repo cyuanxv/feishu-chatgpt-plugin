@@ -34,7 +34,7 @@ const { Miniflare } = require(
 );
 const SITE = "https://feishu.example.test";
 const AUTHORIZE = "https://accounts.feishu.cn/open-apis/authen/v1/authorize";
-const TOKEN = "https://accounts.feishu.cn/oauth/v3/token";
+const TOKEN = "https://open.feishu.cn/open-apis/authen/v2/oauth/token";
 const PROFILE = "https://open.feishu.cn/open-apis/authen/v1/user_info";
 const SCOPE =
   "calendar:calendar:read calendar:calendar.event:read offline_access";
@@ -119,7 +119,7 @@ async function provider(req) {
       accept: req.headers.get("accept"),
     };
     const body = await req.text();
-    const p = new URLSearchParams(body),
+    const p = new URLSearchParams(JSON.parse(body)),
       record = codes.get(p.get("code"));
     const call = {
       valid: false,
@@ -133,7 +133,7 @@ async function provider(req) {
       assert.equal(req.method, "POST");
       assert.equal(
         req.headers.get("content-type"),
-        "application/x-www-form-urlencoded",
+        "application/json; charset=utf-8",
       );
       assert.equal(req.headers.get("authorization"), null);
       const keys = [

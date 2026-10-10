@@ -1,3 +1,5 @@
+> 云端修复状态（2026-10-11）：Sites 适配器 0.1.0-sites.13 已部署并通过真实 OAuth、浏览器与聊天端日程读取验收。运行在云端 Workers / D1，不依赖本机。仅日程读取已上线，其他文档与设备授权候选仍未上线。详见 [修复及验收记录](snapshots/sites-adapter-0.1.0-sites.8/docs/CLOUD-OAUTH-REPAIR.md)。
+
 # Feishu for ChatGPT: development preview
 
 A TypeScript/Node.js remote MCP integration under development. The current build exposes 17 **read-only tools using synthetic fixtures**. It has never connected to a real Feishu account, and is not installed in ChatGPT or submitted to the public directory.

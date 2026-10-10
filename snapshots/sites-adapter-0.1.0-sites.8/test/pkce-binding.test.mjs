@@ -26,7 +26,7 @@ test("sealed authorization bindings survive storage and independent S256 computa
   assert.equal(secret.redirectUri, f.url.searchParams.get("redirect_uri"));
   assert.equal(secret.clientId, f.url.searchParams.get("client_id"));
   assert.equal((await s.callback(f)).status, 303);
-  const params = new URLSearchParams(s.mocked.calls[0].init.body);
+  const params = new URLSearchParams(JSON.parse(s.mocked.calls[0].init.body));
   assert.equal(params.get("code_verifier"), secret.verifier);
   assert.equal(params.get("scope"), SCOPES.join(" "));
 });
@@ -79,7 +79,7 @@ test("cumulative grants can be narrowed but extra returned scopes still fail clo
     const s = await setup(),
       f = await s.begin();
     s.mocked.hooks.token = (_url, init) => {
-      const scope = new URLSearchParams(init.body).get("scope");
+      const scope = new URLSearchParams(JSON.parse(init.body)).get("scope");
       assert.equal(scope, SCOPES.join(" "));
       return Response.json({
         access_token: "synthetic-token",
@@ -111,7 +111,7 @@ test("binding diagnostic has only fixed labels, booleans and bounded length", as
       {
         event: "feishu_oauth_binding_check",
         diagnostic_version: 1,
-        endpoint: "feishu_oauth_v3",
+        endpoint: "feishu_oauth_v2_pkce",
         version_matches: true,
         challenge_matches: true,
         redirect_matches: true,
@@ -142,7 +142,7 @@ test("provider 20049 still fails closed without retry or endpoint fallback", asy
   assert.equal(s.mocked.calls.length, 1);
   assert.equal(
     s.mocked.calls[0].url,
-    "https://accounts.feishu.cn/oauth/v3/token",
+    "https://open.feishu.cn/open-apis/authen/v2/oauth/token",
   );
   assert.equal(await s.store.get(P), null);
   assert.equal((await s.callback(f)).status, 400);

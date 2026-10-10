@@ -1,10 +1,11 @@
-import { assert, hash } from "./security.ts";
+import { AppError, assert, hash } from "./security.ts";
 
 export const AUTHORIZE_ENDPOINT =
   "https://accounts.feishu.cn/open-apis/authen/v1/authorize";
-export const TOKEN_ENDPOINT = "https://accounts.feishu.cn/oauth/v3/token";
-export const TOKEN_CONTENT_TYPE = "application/x-www-form-urlencoded";
-export const OAUTH_SOURCE_VERSION = "0.1.0-sites.9";
+export const TOKEN_ENDPOINT =
+  "https://open.feishu.cn/open-apis/authen/v2/oauth/token";
+export const TOKEN_CONTENT_TYPE = "application/json; charset=utf-8";
+export const OAUTH_SOURCE_VERSION = "0.1.0-sites.13";
 export interface OAuthBinding {
   clientId: string;
   redirectUri: string;
@@ -71,7 +72,21 @@ export async function checkTokenWire(
   binding: OAuthBinding,
   expected: { code: string; verifier: string; clientSecret: string },
 ) {
-  const p = new URLSearchParams(request.body);
+  let fields: Record<string, string>;
+  try {
+    fields = JSON.parse(request.body);
+  } catch {
+    throw new AppError("oauth_wire_mismatch", 500);
+  }
+  assert(
+    fields &&
+      typeof fields === "object" &&
+      !Array.isArray(fields) &&
+      Object.values(fields).every((v) => typeof v === "string"),
+    "oauth_wire_mismatch",
+    500,
+  );
+  const p = new URLSearchParams(fields);
   const verifier = p.get("code_verifier") ?? "";
   check("token_request", {
     endpoint_matches: url === TOKEN_ENDPOINT,

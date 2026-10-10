@@ -208,11 +208,11 @@ export class Feishu {
     const request = {
       method: "POST",
       headers: { "Content-Type": TOKEN_CONTENT_TYPE },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         client_id: this.env.FEISHU_APP_ID,
         client_secret: this.env.FEISHU_APP_SECRET,
         ...data,
-      }).toString(),
+      }),
     };
     if (binding)
       await checkTokenWire(TOKEN_ENDPOINT, request, binding, {
@@ -336,7 +336,7 @@ export class Feishu {
   }
   async calendars(token: string, pageToken?: string) {
     return this.read("/open-apis/calendar/v4/calendars", token, {
-      page_size: "5",
+      page_size: "50",
       ...(pageToken ? { page_token: pageToken } : {}),
     });
   }

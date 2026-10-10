@@ -221,7 +221,9 @@ export function createWorker(
             });
           const p = principal(request, env);
           try {
-            object(body.params, ["name", "arguments"]);
+            object(body.params, ["name", "arguments", "_meta"]);
+            // MCP RequestParams permits transport metadata. Never treat it as tool input or identity.
+            if (body.params._meta !== undefined) assert(body.params._meta && typeof body.params._meta === "object" && !Array.isArray(body.params._meta));
             assert(
               body.params.name === "get_agenda",
               "write_or_unknown_tool_denied",
@@ -278,6 +280,17 @@ export function createWorker(
           }
         }
         const p = principal(request, env);
+        if (url.pathname === "/api/agenda") {
+          assert(!synthetic, "not_found", 404);
+          assert(request.method === "POST", "method_not_allowed", 405);
+          sameOrigin(request, env);
+          assert(configured(env), "configuration_required", 503);
+          const args = await requestJSON(request);
+          await store.rate(await hash(aad(p, "agenda-rate")), now(), 60);
+          return response(
+            await new Agenda(store, link, api, vault, now).read(p, args),
+          );
+        }
         if (url.pathname === "/api/demo/agenda") {
           assert(synthetic, "not_found", 404);
           assert(request.method === "POST", "method_not_allowed", 405);

@@ -23,7 +23,7 @@ test("browser start, official v3 exchange, identity and encrypted D1 persistence
   const row = await s.store.get(P);
   assert.equal(row.tenant_key, "synthetic-tenant");
   assert.equal(row.open_id, "ou_synthetic");
-  const body = new URLSearchParams(s.mocked.calls[0].init.body);
+  const body = new URLSearchParams(JSON.parse(s.mocked.calls[0].init.body));
   assert.equal(body.get("client_secret"), "synthetic-app-secret");
   assert.equal(
     await hash(body.get("code_verifier")),

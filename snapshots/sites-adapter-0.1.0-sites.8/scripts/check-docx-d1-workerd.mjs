@@ -73,7 +73,7 @@ const mf = new Miniflare({
     FEISHU_READ_ENABLED: "true",
   },
   outboundService: async (req) => {
-    if (req.url === "https://accounts.feishu.cn/oauth/v3/token") {
+    if (req.url === "https://open.feishu.cn/open-apis/authen/v2/oauth/token") {
       refreshCalls++;
       if (refreshBarrier) {
         const b = refreshBarrier;

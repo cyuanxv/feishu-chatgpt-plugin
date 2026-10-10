@@ -91,7 +91,7 @@ export class Linking {
       JSON.stringify({
         event: "feishu_oauth_binding_check",
         diagnostic_version: 1,
-        endpoint: "feishu_oauth_v3",
+        endpoint: "feishu_oauth_v2_pkce",
         version_matches: versionMatches,
         challenge_matches: challengeMatches,
         redirect_matches: redirectMatches,

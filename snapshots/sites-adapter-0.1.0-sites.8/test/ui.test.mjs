@@ -151,7 +151,7 @@ test("served UI navigation is independently bound to the final token Request for
   const code = "synthetic_code_+/%&=";
   let checked = false;
   s.mocked.hooks.token = async (url, init) => {
-    const body = await new Request(url, init).formData();
+    const body = new URLSearchParams(await new Request(url, init).json());
     assert.equal(body.get("code"), code);
     assert.equal(
       createHash("sha256")
@@ -285,4 +285,24 @@ test("browser demo succeeds while the platform reserves /mcp for separate author
   await b.click("demo");
   assert.match(b.nodes["#demo-result"].textContent, /虚构日程/);
   assert.deepEqual(b.paths, ["/api/status", "/api/demo/agenda"]);
+});
+
+test("connected browser agenda uses the same scoped cloud reader", async () => {
+  const s = await setup();
+  await s.grant();
+  const b = await browser(s);
+  assert.equal(b.nodes["#demo"].hidden, false);
+  await b.click("demo");
+  assert.equal(b.paths.at(-1), "/api/agenda");
+  assert.match(b.nodes["#demo-result"].textContent, /已从飞书云端读取/);
+  assert.equal(
+    (
+      await s.send("/api/agenda", {
+        method: "POST",
+        body: {},
+        headers: { Origin: "https://evil.test" },
+      })
+    ).status,
+    403,
+  );
 });

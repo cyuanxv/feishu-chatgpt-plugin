@@ -10,7 +10,9 @@ test("refresh rotates credentials, expiry and scopes atomically", async () => {
   const token = await s.link.access(P, row.grant_id);
   assert.equal(s.mocked.calls.length, before + 1);
   assert.equal(
-    new URLSearchParams(s.mocked.calls.at(-1).init.body).get("grant_type"),
+    new URLSearchParams(JSON.parse(s.mocked.calls.at(-1).init.body)).get(
+      "grant_type",
+    ),
     "refresh_token",
   );
   assert.equal(token.row.version, row.version + 1);
