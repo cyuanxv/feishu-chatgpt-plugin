@@ -11,3 +11,5 @@ export * from "./docx-candidate.ts";
 export * from "./docx-d1-access.ts";
 
 export * from "./apps.ts";
+
+export * from "./readonly.ts";

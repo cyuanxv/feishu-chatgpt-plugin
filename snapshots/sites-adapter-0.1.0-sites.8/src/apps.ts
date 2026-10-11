@@ -16,7 +16,8 @@ import { Agenda } from "./agenda.ts";
 import { DocxCandidate, DocxCandidateProvider } from "./docx-candidate.ts";
 import { createDocxD1Access } from "./docx-d1-access.ts";
 const appIdSchema = z.string().regex(/^cli_[a-zA-Z0-9]{8,64}$/);
-const capabilities = [...SCOPES, ...DOCX_SCOPES];
+import {READ_SCOPES, READ_REQUIREMENTS, ReadonlyAPI, ReadFailure, readInput} from './readonly.ts';
+const capabilities = [...SCOPES, ...DOCX_SCOPES, ...READ_SCOPES];
 interface AppRow {
   app_id: string;
   label: string;
@@ -202,7 +203,29 @@ export class Apps {
     }
     return output;
   }
+  async query(p: Principal, args: unknown) {
+    assert(args && typeof args==='object' && !Array.isArray(args));
+    const {connection_id,...rest}=args as Record<string,unknown>;
+    assert(connection_id===undefined || typeof connection_id==='string');
+    const input=readInput(rest), required=READ_REQUIREMENTS[input.operation]!;
+    if(input.cursor) assert(connection_id,'connection_reference_required');
+    const rows=await this.rows(p); const active: {ctx: Awaited<ReturnType<Apps['context']>>; row: Grant}[]=[];
+    for(const id of ['primary',...rows.map(r=>r.app_id)]){
+      const ctx=await this.context(p,id), row=await this.store.get(ctx.p);
+      if(row?.status==='active')active.push({ctx,row});
+    }
+    if(!connection_id&&active.length>1)assert(active.every(v=>v.row.union_id&&v.row.union_id===active[0]!.row.union_id&&v.row.tenant_key===active[0]!.row.tenant_key),'account_selection_required',409);
+    const matching=active.filter(v=>(!connection_id||v.ctx.id===connection_id)&&required.some(s=>JSON.parse(v.row.scopes).includes(s)));
+    if(!matching.length)return {error:active.length?'insufficient_scope':'connection_required',operation:input.operation,required_scopes_any:required,connections:(await this.list(p)).map(c=>({connection_id:c.connection_id,label:c.label,connected:c.connected,can_authorize:c.available_scopes.some((s:string)=>required.includes(s))})),hint:'在连接管理中授权已有权限的应用后重试。'};
+    const attempts=[];
+    for(const {ctx,row} of matching){
+      try{const access=await ctx.link.access(ctx.p,row.grant_id);const result=await new ReadonlyAPI(this.transport,this.vault,this.now).run(ctx.p,row.grant_id,access.token,input);return {...result,connection_id:ctx.id};}
+      catch(e){if(e instanceof ReadFailure&&e.status===403){attempts.push({connection_id:ctx.id,provider_code:e.provider_code});if(!connection_id&&!input.cursor)continue;}throw e;}
+    }
+    return {error:'resource_access_denied',operation:input.operation,required_scopes_any:required,attempts,hint:'应用具备接口权限，但当前用户或应用无该资源访问权。'};
+  }
   async read(p: Principal, name: string, args: unknown) {
+    if(name === "query_feishu") return this.query(p,args);
     assert(args && typeof args === "object" && !Array.isArray(args));
     const { connection_id, ...input } = args as Record<string, unknown>;
     if (connection_id !== undefined) assert(typeof connection_id === "string");

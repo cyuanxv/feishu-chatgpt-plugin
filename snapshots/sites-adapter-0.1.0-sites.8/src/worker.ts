@@ -19,6 +19,7 @@ import {
   safeError,
   type Env,
 } from "./security.ts";
+import { READ_TOOL } from "./readonly.ts";
 import { Apps } from "./apps.ts";
 import { Store } from "./store.ts";
 import {
@@ -256,7 +257,7 @@ export function createWorker(
                         },
                       }
                     : TOOL,
-                  ...(docxEnabled(env) ? DOCX_TOOLS : []),
+                  ...(docxEnabled(env) ? [...DOCX_TOOLS, READ_TOOL] : []),
                 ],
               },
             });
@@ -281,7 +282,7 @@ export function createWorker(
             assert(
               body.params.name === "get_agenda" ||
                 (docxEnabled(env) &&
-                  ["search_docx", "fetch_docx"].includes(
+                  ["search_docx", "fetch_docx", "query_feishu"].includes(
                     String(body.params.name),
                   )),
               "write_or_unknown_tool_denied",
@@ -416,6 +417,10 @@ export function createWorker(
             return response({ disconnected: true });
           }
           return response({ error: "not_found" }, 404);
+        }
+        if(url.pathname === '/api/query') {
+          assert(docxEnabled(env),'not_found',404);assert(request.method==='POST','method_not_allowed',405);sameOrigin(request,env);assert(configured(env),'configuration_required',503);
+          const args=await requestJSON(request);await store.rate(await hash(aad(p,'agenda-rate')),now(),60);return response(await apps.query(p,args));
         }
         if (["/api/docx/search", "/api/docx/fetch"].includes(url.pathname)) {
           assert(docxEnabled(env), "not_found", 404);
