@@ -18,6 +18,7 @@ export interface Env {
   FEISHU_APP_SECRET?: string;
   FEISHU_READ_ENABLED?: string;
   FEISHU_DATA_MODE?: string;
+  FEISHU_DOCX_ENABLED?: string;
 }
 export interface Principal {
   site: string;

@@ -41,6 +41,14 @@ export const SCOPES = [
   "calendar:calendar.event:read",
   "offline_access",
 ] as const;
+export const DOCX_SCOPES = [
+  "search:docs:read",
+  "docx:document:readonly",
+] as const;
+export const docxEnabled = (env: Env) =>
+  dataMode(env) === "feishu" && env.FEISHU_DOCX_ENABLED === "true";
+export const requestedScopes = (env: Env): readonly string[] =>
+  docxEnabled(env) ? [...SCOPES, ...DOCX_SCOPES] : SCOPES;
 export interface Tokens {
   access_token: string;
   refresh_token: string;
@@ -183,6 +191,13 @@ export class Feishu {
     binding: OAuthBinding;
   }): Promise<Tokens> {
     const binding = { ...input.binding };
+    const scopes = binding.scope.split(" ");
+    assert(
+      SCOPES.every((s) => scopes.includes(s)) &&
+        scopes.every((s) => requestedScopes(this.env).includes(s)),
+      "provider_scope_changed",
+      401,
+    );
     return this.token(
       {
         grant_type: "authorization_code",
@@ -191,7 +206,7 @@ export class Feishu {
         code_verifier: input.verifier,
         scope: binding.scope,
       },
-      SCOPES,
+      scopes,
       binding,
     );
   }
@@ -255,8 +270,39 @@ export class Feishu {
       );
     }
     const parsed = tokenSchema.safeParse(raw);
+    if (!parsed.success)
+      console.warn(
+        JSON.stringify({
+          event: "feishu_token_shape_failure",
+          refresh: data.grant_type === "refresh_token",
+          fields: parsed.error.issues
+            .map((i) => String(i.path[0]))
+            .filter((v) =>
+              [
+                "access_token",
+                "refresh_token",
+                "token_type",
+                "expires_in",
+                "refresh_token_expires_in",
+                "scope",
+              ].includes(v),
+            ),
+        }),
+      );
     assert(parsed.success, "provider_authorization_required", 401);
     const scopes = [...new Set(parsed.data.scope.split(" ").filter(Boolean))];
+    if (
+      !SCOPES.every((s) => scopes.includes(s)) ||
+      !scopes.every((s) => allowed.includes(s))
+    )
+      console.warn(
+        JSON.stringify({
+          event: "feishu_token_scope_failure",
+          refresh: data.grant_type === "refresh_token",
+          missing_required: !SCOPES.every((s) => scopes.includes(s)),
+          has_unrequested: !scopes.every((s) => allowed.includes(s)),
+        }),
+      );
     assert(
       SCOPES.every((s) => scopes.includes(s)) &&
         scopes.every((s) => allowed.includes(s)),

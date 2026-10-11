@@ -1,4 +1,4 @@
-// Offline candidate only: not imported by worker.ts or registered as an MCP tool.
+// Bounded DOCX reader. Worker registration is controlled by FEISHU_DOCX_ENABLED.
 import { z } from "zod";
 import {
   AppError,
@@ -174,6 +174,8 @@ export class DocxCandidate {
     private access: DocxAccess,
     private vault: Vault,
     private now = Date.now,
+    private source:
+      "synthetic_candidate" | "feishu_api" = "synthetic_candidate",
   ) {}
   private async auth(
     p: Principal,
@@ -333,7 +335,7 @@ export class DocxCandidate {
       traversal_complete: next === null,
       partial: next !== null,
       coverage: "docx_only",
-      source: "synthetic_candidate",
+      source: this.source,
       live_verified: false,
       content_trust: "untrusted_source_data",
     });
@@ -418,7 +420,7 @@ export class DocxCandidate {
       total_codepoints: chars.length,
       coverage: "plain_text_only",
       title_basis: "search_snapshot",
-      source: "synthetic_candidate",
+      source: this.source,
       live_verified: false,
       content_trust: "untrusted_source_data",
     });

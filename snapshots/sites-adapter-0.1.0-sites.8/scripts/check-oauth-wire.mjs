@@ -323,6 +323,14 @@ async function uiVM(user) {
       "disconnect",
       "demo",
       "demo-result",
+      "refresh-token",
+      "documents",
+      "doc-search",
+      "doc-query",
+      "doc-results",
+      "doc-content",
+      "doc-more",
+      "doc-next",
     ].map((id) => [
       "#" + id,
       {
@@ -331,7 +339,10 @@ async function uiVM(user) {
         disabled: false,
         listeners: [],
         addEventListener(event, handler) {
-          assert.equal(event, id === "connect-form" ? "submit" : "click");
+          assert.equal(
+            event,
+            ["connect-form", "doc-search"].includes(id) ? "submit" : "click",
+          );
           this.listeners.push(handler);
         },
       },

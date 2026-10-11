@@ -1,5 +1,6 @@
 import {
   AppError,
+  safeError,
   assert,
   aad,
   hash,
@@ -9,7 +10,7 @@ import {
   type Principal,
 } from "./security.ts";
 import { Store, type Grant } from "./store.ts";
-import { Feishu, SCOPES, type Tokens } from "./feishu.ts";
+import { Feishu, SCOPES, requestedScopes, type Tokens } from "./feishu.ts";
 import { AUTHORIZE_ENDPOINT, checkAuthorizationWire } from "./oauth-wire.ts";
 export class Linking {
   constructor(
@@ -20,6 +21,7 @@ export class Linking {
     private now = Date.now,
   ) {}
   async begin(p: Principal) {
+    const scope = requestedScopes(this.env).join(" ");
     const state = random(),
       cookie = random(),
       verifier = random();
@@ -34,7 +36,7 @@ export class Linking {
       user_id: p.user,
       cookie_hash: await hash(cookie),
       verifier: await this.vault.seal(
-        { version: 2, verifier, challenge, redirectUri, clientId },
+        { version: 2, verifier, challenge, redirectUri, clientId, scope },
         aad(p, "oauth", stateHash),
       ),
       epoch,
@@ -46,14 +48,14 @@ export class Linking {
       response_type: "code",
       redirect_uri: redirectUri,
       state,
-      scope: SCOPES.join(" "),
+      scope,
       code_challenge: challenge,
       code_challenge_method: "S256",
     }).forEach(([k, v]) => url.searchParams.set(k, v));
     const serialized = url.href;
     checkAuthorizationWire(
       serialized,
-      { clientId, redirectUri, challenge, scope: SCOPES.join(" ") },
+      { clientId, redirectUri, challenge, scope },
       state,
     );
     return { url: serialized, cookie };
@@ -75,6 +77,7 @@ export class Linking {
     );
     const secret = await this.vault.open<{
       version?: number;
+      scope?: string;
       verifier: string;
       challenge?: string;
       redirectUri?: string;
@@ -110,7 +113,7 @@ export class Linking {
         clientId: secret.clientId!,
         redirectUri: secret.redirectUri!,
         challenge: secret.challenge!,
-        scope: SCOPES.join(" "),
+        scope: secret.scope ?? SCOPES.join(" "),
       },
     });
     const profile = await this.api.profile(tokens.access_token);
@@ -137,6 +140,7 @@ export class Linking {
   async access(
     p: Principal,
     grantId: string,
+    forceRefresh = false,
   ): Promise<{ token: string; row: Grant }> {
     let row = await this.store.current(p, grantId);
     let scopes: unknown;
@@ -158,7 +162,7 @@ export class Linking {
       row.credentials!,
       aad(p, "credentials", row.grant_id),
     );
-    if (row.expires <= this.now() + 30000) {
+    if (forceRefresh || row.expires <= this.now() + 30000) {
       row = await this.store.lease(p, row, this.now());
       try {
         tokens = await this.api.token(
@@ -173,7 +177,13 @@ export class Linking {
           tokens.access_expires,
           tokens.refresh_expires,
         );
-      } catch {
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "feishu_refresh_failure",
+            error_code: safeError(error).code,
+          }),
+        );
         await this.store.invalidate(p, row);
         throw new AppError("connection_required", 401);
       }

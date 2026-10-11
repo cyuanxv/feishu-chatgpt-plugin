@@ -14,6 +14,14 @@ async function browser(s, respond = () => null) {
     "disconnect",
     "demo",
     "demo-result",
+    "refresh-token",
+    "documents",
+    "doc-search",
+    "doc-query",
+    "doc-results",
+    "doc-content",
+    "doc-more",
+    "doc-next",
   ];
   const nodes = Object.fromEntries(
     ids.map((id) => [
@@ -24,7 +32,10 @@ async function browser(s, respond = () => null) {
         disabled: false,
         listeners: [],
         addEventListener(event, handler) {
-          assert.equal(event, id === "connect-form" ? "submit" : "click");
+          assert.equal(
+            event,
+            ["connect-form", "doc-search"].includes(id) ? "submit" : "click",
+          );
           this.listeners.push(handler);
         },
       },

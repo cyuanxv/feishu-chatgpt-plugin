@@ -1,3 +1,11 @@
+# DOCX integration status (2026-10-11)
+
+The Worker now gates `search_docx`, `fetch_docx` and same-origin browser readers behind `FEISHU_DOCX_ENABLED=true`; default is off, synthetic mode always off. The owner approved the additional two read scopes on 2026-10-11. New OAuth flows bind their requested scope into the encrypted pending state. Existing calendar grants and pending flows retain calendar-only behavior. Enabling does not create user consent; missing document scope fails before transport. No new schema, secrets, Wiki support or business writes.
+
+Integration tests cover routing, old grants, flow binding, refresh and permission denial. Real-account acceptance is recorded separately in delivery, never inferred from mock results. Live transport outputs `source=feishu_api`; `live_verified=false` is retained as a static contract marker and is not a per-call acceptance claim.
+
+The following describes the historical isolated candidate before integration. Its production-exclusion requirements are superseded by the explicit flag and consent boundary above.
+
 # Independent DOCX search/fetch candidate
 
 This module is offline-only and not imported by the production Worker. It adds no MCP
