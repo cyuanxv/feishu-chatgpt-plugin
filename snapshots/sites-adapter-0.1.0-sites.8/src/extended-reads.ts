@@ -33,6 +33,8 @@ export const EXTENDED_REQUIREMENTS: Record<string, string[]> = {
   file_metadata: ["drive:drive.metadata:readonly"],
   task_search: ["task:task:read"],
   room_search: ["vc:room:readonly"],
+  docx_metadata: ["docx:document:readonly"],
+  docx_blocks: ["docx:document:readonly"],
   profile: [],
   people: ["contact:user:search"],
   chats: ["im:chat:read"],
@@ -70,6 +72,10 @@ export const EXTENDED_SCHEMAS: Record<string, z.ZodType> = {
     .strict(),
   room_search: z
     .object({ query: z.string().max(100).optional(), page_size: page })
+    .strict(),
+  docx_metadata: z.object({ token: id }).strict(),
+  docx_blocks: z
+    .object({ token: id, revision: z.number().int().min(0), page_size: page })
     .strict(),
   profile: z.object({}).strict(),
   people: z
@@ -144,7 +150,14 @@ export function extendedRequest(
     if (next !== undefined) q.set("page_token", String(next));
   };
   const out: ReadRequest = { path: "", query: q };
-  if (op === "search_resources") {
+  if (op === "docx_metadata") {
+    out.path = `/docx/v1/documents/${a.token}`;
+  } else if (op === "docx_blocks") {
+    out.path = `/docx/v1/documents/${a.token}/blocks`;
+    paging();
+    q.set("document_revision_id", String(a.revision));
+    out.pageKey = "items";
+  } else if (op === "search_resources") {
     out.path = "/search/v2/doc_wiki/search";
     out.body = {
       query: a.query,
@@ -234,12 +247,17 @@ export function extendedRequest(
     q.set("user_id_type", "open_id");
     out.pageKey = "items";
   } else if (op === "freebusy" || op === "room_availability") {
-    out.path = "/calendar/v4/freebusy/list";
+    out.path =
+      op === "freebusy"
+        ? "/calendar/v4/freebusy/batch"
+        : "/calendar/v4/freebusy/list";
     q.set("user_id_type", "open_id");
     out.body = {
       time_min: a.time_range.start,
       time_max: a.time_range.end,
-      ...(op === "freebusy" ? { user_id: a.user_id } : { room_id: a.room_id }),
+      ...(op === "freebusy"
+        ? { user_ids: [a.user_id] }
+        : { room_id: a.room_id }),
       only_busy: true,
       include_external_calendar: true,
     };
@@ -273,6 +291,19 @@ export function validateExtended(
   a: Record<string, any>,
   data: any,
 ) {
+  if (op === "docx_metadata")
+    assert(
+      data.document?.document_id === a.token &&
+        Number.isInteger(data.document?.revision_id),
+      "provider_response_invalid",
+      502,
+    );
+  if (op === "docx_blocks")
+    assert(
+      data.items.every((v: any) => id.safeParse(v?.block_id).success),
+      "provider_response_invalid",
+      502,
+    );
   if (op === "search_resources")
     assert(
       data.res_units.every(

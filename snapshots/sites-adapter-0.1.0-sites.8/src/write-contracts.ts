@@ -204,7 +204,7 @@ export function writeRequirements(operation: string, a: Record<string, any>) {
 export const WRITE_TOOLS = Object.entries(WRITE_SCHEMAS).map(
   ([name, schema]) => ({
     name,
-    description: `Prepare ${name} for user review. Does not execute the action. Returns a private confirmation page; the user must review and confirm there. Do not call the confirmation endpoint or claim success before the final receipt. All recipients and resource IDs must be explicitly selected.`,
+    description: `Prepare ${name} for user review. Does not execute the action. Returns a private confirmation page; the user must review and confirm there. Do not call the confirmation endpoint or claim success before the final receipt. All recipients and resource IDs must be explicitly selected. Open IDs are application-scoped: use the connection_id that resolved the recipients; never reuse them through another app. For update_doc first query docx_metadata for revision, then docx_blocks to select a block.`,
     inputSchema: {
       type: "object",
       properties: {

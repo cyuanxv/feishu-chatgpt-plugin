@@ -123,6 +123,14 @@ export class WriteProvider {
       time_max: a.time_range.end,
       only_busy: true,
     });
+    if(data.freebusy_list === undefined){
+      // An omitted interval list is not sufficient proof for a resource write.
+      // Recheck the official available-room finder for this exact slot.
+      const found=await this.call(token,"/calendar/v4/freebusy/room_find","POST",{event_start_time:a.time_range.start,event_end_time:a.time_range.end,time_zone:a.timezone});
+      assert(Array.isArray(found.available_rooms),"room_availability_unknown",422);
+      assert(found.available_rooms.some((v:any)=>v.room_id===a.room_id),"room_unavailable",409);
+      return;
+    }
     assert(
       Array.isArray(data.freebusy_list) &&
         data.freebusy_list.every(
@@ -302,7 +310,7 @@ export class WriteProvider {
         );
         effects.push({
           record_id: data.record.record_id,
-          fields: data.record.fields,
+          updated_fields: Object.keys(a.fields),
         });
       } else if (operation === "create_task") {
         const data = await this.call(

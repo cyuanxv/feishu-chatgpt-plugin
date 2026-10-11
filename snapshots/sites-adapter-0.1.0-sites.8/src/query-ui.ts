@@ -20,9 +20,9 @@ function show(data,op,more){if(!more)results.replaceChildren();
  if(!items.length){el('p','没有可显示的记录',results);return 0;}
  if(op==='base_records'){const headers=[...new Set(items.flatMap(x=>Object.keys(x.fields||{})))];if(headers.length)table(headers,items.map(x=>headers.map(h=>(x.fields||{})[h])));else el('p','本页记录的字段为空',results);return items.length;}
  if(op==='base_fields'){table(['字段名称','字段类型'],items.map(x=>[x.field_name,x.ui_type||x.type]));return items.length;}
- for(const x of items){const c=el('article',undefined,results);c.className='result-card';el('h2',x.summary||x.title||x.name||x.room_name||x.start_time||'未命名',c);
+ for(const x of items){const c=el('article',undefined,results);c.className='result-card';el('h2',x.summary||x.title||x.name||x.room_name||x.meta_data?.i18n_names?.zh_cn||x.display_info?.replace(/<[^>]*>/g,'')||x.start_time||'未命名',c);
  if(op==='tasks'||op==='task'||op==='tasklist_tasks'){el('p',x.status==='done'||(x.completed_at&&x.completed_at!=='0')?'已完成':'待办',c).className='badge';if(x.description)el('p',x.description,c);if(x.due?.timestamp){const date=new Date(Number(x.due.timestamp));if(!isNaN(date))el('p','截止：'+date.toLocaleString('zh-CN'),c);}}
- else {if(x.description)el('p',x.description,c);if(x.end_time)el('p','结束：'+x.end_time,c);if(x.capacity)el('p','座位：'+x.capacity,c);if(x.email)el('p',x.email,c);const kind=x.obj_type||x.docs_type;if(kind)el('p','类型：'+kind,c).className='badge';const id=x.room_id||x.open_id||x.chat_id||x.message_id||x.space_id||x.sheet_id||x.table_id||x.guid||x.node_token||x.docs_token;if(id)el('p','标识：'+id,c).className='badge';}
+ else {if(x.description)el('p',x.description,c);if(x.end_time)el('p','结束：'+x.end_time,c);if(x.capacity)el('p','座位：'+x.capacity,c);if(x.email)el('p',x.email,c);const kind=x.obj_type||x.docs_type;if(kind)el('p','类型：'+kind,c).className='badge';const id=x.room_id||x.open_id||x.id||x.chat_id||x.message_id||x.space_id||x.sheet_id||x.table_id||x.guid||x.node_token||x.docs_token;if(id)el('p','标识：'+id,c).className='badge';}
  if(x.url)link(c,x.url);
  }return items.length;
 }

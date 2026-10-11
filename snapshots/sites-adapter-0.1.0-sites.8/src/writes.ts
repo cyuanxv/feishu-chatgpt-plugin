@@ -133,6 +133,15 @@ export class Writes {
         "account_selection_required",
         409,
       );
+    const appScopedPeople =
+      (operation === "send_message" && a.receive_id_type === "open_id") ||
+      a.attendee_ids?.length > 0 ||
+      a.assignee_ids?.length > 0;
+    assert(
+      !appScopedPeople || active.length <= 1 || !!parsed.data.connection_id,
+      "recipient_connection_required",
+      409,
+    );
     const required = writeRequirements(operation, a);
     const chosen = active.find(
       (v) =>

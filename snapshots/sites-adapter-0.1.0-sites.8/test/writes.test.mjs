@@ -375,3 +375,7 @@ test("refreshing a pending room reservation reads status without another mutatio
   await w.execute(P, r.intent_id);
   assert.equal(mutations, 2);
 });
+
+test('maximum supported document preview survives encrypted storage round trip',async()=>{const s=await ready();const w=new Writes(s.env,async()=>{throw Error('preview only')},s.now);const text='文'.repeat(20000);const r=await w.prepare(P,'create_doc',{request_id:crypto.randomUUID(),parameters:{title:'max',text}});assert.equal((await w.review(P,r.intent_id)).parameters.text,text);});
+
+test('omitted room busy intervals require a fresh explicit room-finder match',async()=>{let found=false;const p=new WriteProvider(async(url)=>Response.json({code:0,data:url.includes('room_find')?{available_rooms:found?[{room_id:booking.room_id}]:[]}: {}}));await assert.rejects(()=>p.inspectBooking('synthetic',booking),{code:'room_unavailable'});found=true;await p.inspectBooking('synthetic',booking);});

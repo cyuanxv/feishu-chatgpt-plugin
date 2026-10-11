@@ -133,7 +133,7 @@ export class Vault {
   }
   async open<T>(value: string, binding: string): Promise<T> {
     try {
-      assert(value.length <= 20000);
+      assert(value.length <= 200000);
       const [v, iv, data, ...rest] = value.split(".");
       assert(v === "v1" && iv && data && !rest.length);
       const plain = await crypto.subtle.decrypt(

@@ -229,3 +229,78 @@ test("changing DOCX content invalidates continuation instead of joining revision
     { code: "document_changed_restart" },
   );
 });
+
+test("DOCX edit preparation exposes the exact revision and version-bound blocks", async () => {
+  const s = await ready();
+  const urls = [];
+  const apps = new Apps(
+    s.env,
+    async (url) => {
+      urls.push(url);
+      return Response.json({
+        code: 0,
+        data: url.includes("/blocks")
+          ? { items: [{ block_id: "block1" }], has_more: false }
+          : { document: { document_id: "doc1", revision_id: 7 } },
+      });
+    },
+    s.now,
+  );
+  const metadata = await apps.query(P, {
+    operation: "docx_metadata",
+    parameters: { token: "doc1" },
+  });
+  assert.equal(metadata.data.document.revision_id, 7);
+  await apps.query(P, {
+    operation: "docx_blocks",
+    parameters: { token: "doc1", revision: 7 },
+  });
+  assert(urls[1].includes("document_revision_id=7"));
+});
+
+test("expanded OAuth credentials above the old 20 KB envelope remain readable", async () => {
+  const { Vault } = await import("../.test-build/module.mjs");
+  const s = await ready();
+  const v = new Vault(s.env.APP_ENCRYPTION_KEY);
+  const tokens = {
+    access_token: "a".repeat(8000),
+    refresh_token: "r".repeat(8000),
+    scopes: Array(39).fill("calendar:calendar.event:read"),
+  };
+  const sealed = await v.seal(tokens, "credential-fixture");
+  assert(sealed.length > 20000);
+  assert.deepEqual(await v.open(sealed, "credential-fixture"), tokens);
+  await assert.rejects(() => v.open(sealed, "other-owner"));
+});
+
+test("batch freebusy requires an explicit user result and handles an omitted empty interval list", async () => {
+  const s = await ready();
+  let missing = false;
+  const apps = new Apps(
+    s.env,
+    async (url, init) => {
+      assert(url.includes("/freebusy/batch"));
+      assert.deepEqual(JSON.parse(init.body).user_ids, ["ou_one"]);
+      return Response.json({
+        code: 0,
+        data: { freebusy_lists: missing ? [] : [{ user_id: "ou_one" }] },
+      });
+    },
+    s.now,
+  );
+  const input = {
+    operation: "freebusy",
+    parameters: {
+      user_id: "ou_one",
+      time_range: {
+        start: "2026-10-12T09:00:00Z",
+        end: "2026-10-12T10:00:00Z",
+      },
+    },
+  };
+  assert.deepEqual((await apps.query(P, input)).data.freebusy_list, []);
+  missing = true;
+  await assert.rejects(() => apps.query(P, input), {
+    code: "availability_unknown",
+  });
+});
