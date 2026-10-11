@@ -13,3 +13,13 @@ export * from "./docx-d1-access.ts";
 export * from "./apps.ts";
 
 export * from "./readonly.ts";
+
+export * from "./meeting-slots.ts";
+
+export * from "./writes.ts";
+export * from "./write-contracts.ts";
+export * from "./write-provider.ts";
+
+export * from "./plan-reads.ts";
+
+export * from "./unified-search.ts";

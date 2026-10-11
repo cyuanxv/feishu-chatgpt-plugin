@@ -4,6 +4,7 @@ import {
   integer,
   primaryKey,
   index,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 export const owners = sqliteTable(
   "owners",
@@ -83,4 +84,27 @@ export const appRegistry = sqliteTable(
     scopes: text("scopes").notNull(),
   },
   (t) => [primaryKey({ columns: [t.site, t.owner, t.appId] })],
+);
+export const writeIntents = sqliteTable(
+  "write_intents",
+  {
+    site: text("site").notNull(),
+    owner: text("owner").notNull(),
+    id: text("intent_id").notNull(),
+    requestId: text("request_id").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    connectionId: text("connection_id").notNull(),
+    scopedUser: text("scoped_user").notNull(),
+    grantId: text("grant_id").notNull(),
+    operation: text("operation").notNull(),
+    payload: text("payload").notNull(),
+    status: text("status").notNull(),
+    receipt: text("receipt"),
+    expires: integer("expires").notNull(),
+    created: integer("created").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.site, t.owner, t.id] }),
+    uniqueIndex("write_request_lookup").on(t.site, t.owner, t.requestId),
+  ],
 );

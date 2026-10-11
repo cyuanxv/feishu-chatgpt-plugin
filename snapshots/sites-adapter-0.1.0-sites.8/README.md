@@ -1,10 +1,8 @@
-# Feishu Sites adapter: 0.1.0-sites.13
+# 飞书工作台 Sites 适配器：0.1.0-sites.22
 
-Cloud-hosted, owner-private calendar reader. The historical snapshot directory is retained for compatibility. This adapter runs in Sites / Cloudflare Workers with D1; it needs no local stdio process, tunnel, or running personal computer.
+原规划 30 个工具（17 读、13 写）与会议室预订已接入现有私有 Sites 站点。所有写工具只生成预览，经过确认页才执行；源码默认关闭写入，现有私有部署已启用。文档和任务共六类写入在批准样本上真实成功，其他写入与实际订房仍需专项验收。详情见 [逐项进度](docs/FULL-PLAN-PROGRESS.md)。
 
-The 2026-10-11 repair resolves a reproduced OAuth 20049 failure by pairing the authorization endpoint with the documented PKCE-compatible v2 token endpoint and JSON request encoding. Real-account authorization and encrypted grant persistence succeeded after deployment. Native chat and browser agenda reads both returned 7 real events with complete traversal and no errors.
-
-Only `get_agenda` is exposed. DOCX and device-flow candidates remain separate; they are not represented as completed live features. See [repair evidence and limitations](docs/CLOUD-OAUTH-REPAIR.md).
+运行于 Sites / Cloudflare Workers 和 D1，不依赖本机 stdio、隧道或个人电脑常驻。历史快照目录名保留以兼容既有工具；下方 OAuth 安全约束继续适用。
 
 ## Included implementation
 
@@ -40,8 +38,14 @@ Tests use disposable synthetic databases and intercept provider calls. They need
 
 The hosting manifest contains only logical D1/MCP configuration, without a registered project ID. No deployment audience, app ID, Site URL, user identity, runtime key, grant, database contents, request log or private Git history is included.
 
-See [handoff](docs/HANDOFF.md), [security](docs/SECURITY.md), [contracts](docs/CONTRACTS.md) and [validation](docs/VALIDATION.md). `SNAPSHOT-MANIFEST.sha256` covers all shipped files except itself.
+See [handoff](docs/HANDOFF.md), [security](docs/SECURITY.md), [contracts](docs/CONTRACTS.md) and [validation](docs/VALIDATION.md). `SNAPSHOT-MANIFEST.sha256` 属于历史导出记录，不覆盖本分支新增文件；当前文件范围由 `check:source --list` 校验。
 
 This preservation branch requires separate integration review and normal repository CI before any merge or deployment. Publishing source does not activate the adapter or provision a Site. MIT attribution is preserved.
 
 
+
+## 当前配置与运维
+
+通用读取由 FEISHU_DOCX_ENABLED 开启，写入预览和确认执行由 FEISHU_WRITE_ENABLED 开启；它们都不会自动授予飞书权限。应用按实际授权和同账户连接选择。完整写入/会议室规则见 [工作流](docs/WORKFLOWS.md)，开关、巡检与待完成部署验证见 [运维说明](docs/OPERATIONS-FULL-PLAN.md)。
+
+复制源码后按锁文件安装并构建只证明可重建；创建新云端站点、D1、加密密钥、飞书应用回调及真实登录，均需要在新环境独立验收，不能借用旧站点验收结果。

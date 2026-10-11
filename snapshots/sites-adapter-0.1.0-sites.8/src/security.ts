@@ -19,6 +19,7 @@ export interface Env {
   FEISHU_READ_ENABLED?: string;
   FEISHU_DATA_MODE?: string;
   FEISHU_DOCX_ENABLED?: string;
+  FEISHU_WRITE_ENABLED?: string;
   FEISHU_OAUTH_SCOPES?: readonly string[];
 }
 export interface Principal {
@@ -132,7 +133,7 @@ export class Vault {
   }
   async open<T>(value: string, binding: string): Promise<T> {
     try {
-      assert(value.length <= 20000);
+      assert(value.length <= 200000);
       const [v, iv, data, ...rest] = value.split(".");
       assert(v === "v1" && iv && data && !rest.length);
       const plain = await crypto.subtle.decrypt(

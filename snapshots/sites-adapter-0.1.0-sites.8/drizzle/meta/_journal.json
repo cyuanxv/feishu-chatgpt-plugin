@@ -29,6 +29,20 @@
       "when": 1791684668296,
       "tag": "0003_futuristic_omega_flight",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791690584089,
+      "tag": "0004_aromatic_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791690590941,
+      "tag": "0005_clumsy_lifeguard",
+      "breakpoints": true
     }
   ]
 }
