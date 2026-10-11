@@ -391,3 +391,38 @@ test('changed or recurring event cannot be cancelled',async()=>{
  const a={calendar_id:'cal1',event_id:'event1',summary:'test',time_range:{start:'2026-10-12T10:00:00+08:00',end:'2026-10-12T10:30:00+08:00'},timezone:'Asia/Shanghai',need_notification:false};
  for(const recurrence of ['', 'FREQ=DAILY']){let writes=0;const w=new WriteProvider(async(u,i)=>{if(i.method!=='GET')writes++;return Response.json({code:0,data:{event:{event_id:'event1',summary:recurrence?'test':'changed',start_time:{timestamp:String(Date.parse(a.time_range.start)/1000)},end_time:{timestamp:String(Date.parse(a.time_range.end)/1000)},recurrence}}})});assert.equal((await w.execute('t','cancel_event',a,crypto.randomUUID())).status,'failed');assert.equal(writes,0);}
 });
+
+
+test("separate review tabs retain independent browser proofs and reject proof swaps", async () => {
+  const s = await ready();
+  const ids = [];
+  for (let i = 0; i < 2; i++) {
+    const r = await s.tool(request(), P.user, "create_task");
+    ids.push(r.result.structuredContent.intent_id);
+  }
+  const cookies = [], proofs = [];
+  for (const id of ids) {
+    const page = await s.send("/write-review/" + id, {
+      headers: cookies.length ? {Cookie: cookies.join("; ")} : {},
+    });
+    assert.equal(page.status, 200);
+    const setCookie = page.headers.get("set-cookie");
+    assert.ok(setCookie.startsWith(`__Host-feishu-write-${id}=`));
+    assert.match(setCookie, /Secure; HttpOnly; SameSite=Strict; Max-Age=900/);
+    cookies.push(setCookie.split(";")[0]);
+    const detail = await s.send("/api/writes/" + id, {headers: {Cookie: cookies.join("; ")}});
+    proofs.push((await detail.json()).csrf);
+  }
+  const decide = (id, csrf, cookie = cookies.join("; ")) => s.send("/api/writes/" + id, {
+    method: "POST", body: {action: "cancel", csrf}, headers: {Origin: P.site, Cookie: cookie},
+  });
+  assert.equal((await decide(ids[0], proofs[1])).status, 403);
+  assert.equal((await decide(ids[0], proofs[0], cookies[1])).status, 403);
+  assert.equal((await decide(ids[0], proofs[0], cookies[0] + "; " + cookies[0])).status, 403);
+  assert.equal((await decide(ids[0], proofs[0], cookies[0].split("=")[0] + "=other-browser")).status, 403);
+  for (let i = 0; i < 2; i++) {
+    const response = await decide(ids[i], proofs[i]);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, "cancelled");
+  }
+});

@@ -462,7 +462,7 @@ export function createWorker(
               headers: {
                 ...headers,
                 "Content-Type": "text/html; charset=utf-8",
-                "Set-Cookie": `__Host-feishu-write=${random()}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=900`,
+                "Set-Cookie": `__Host-feishu-write-${url.pathname.split("/").pop()!}=${random()}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=900`,
               },
             });
           }
@@ -491,7 +491,7 @@ export function createWorker(
           const cookies = (request.headers.get("cookie") ?? "")
             .split(";")
             .map((v) => v.trim())
-            .filter((v) => v.startsWith("__Host-feishu-write="));
+            .filter((v) => v.startsWith(`__Host-feishu-write-${id}=`));
           assert(cookies.length === 1, "browser_confirmation_required", 403);
           const binding = await hash(cookies[0]!);
           assert(

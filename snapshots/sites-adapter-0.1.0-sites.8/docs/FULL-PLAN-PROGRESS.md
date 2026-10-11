@@ -58,15 +58,15 @@
 | M22 自部署 | 干净源码重建、Node 22/24 CI 已通过 | 干净新租户注册与完整部署 |
 | M23–M24 打包发行 | 私有插件已安装，代码 PR16 与验收 PR294 已合并 | 公共安装与公开发行另行决定 |
 
-## 当前已知问题
+## 多确认页问题已修复
 
-同时打开不同确认页会重设浏览器绑定 Cookie，先打开页确认返回 confirmation_invalid。刷新原意图页后可继续，执行前拦截，没有发现重复写入。本问题待修复及多标签回归；不得以删除 CSRF 校验绕过。当前按顺序处理确认页。
+已将浏览器绑定 Cookie 按操作意图区分，打开不同确认页不再覆盖。身份、意图、浏览器绑定、有效期与幂等校验保留。285 项测试、类型与打包检查通过；云端同时打开两个不同意图，原页无需刷新，两页均成功取消预览，独立 MCP 回读均 cancelled，未创建飞书业务日程。同一意图在多个标签重复打开仍会轮换该意图凭据，旧标签需刷新。
 
 ## 证据入口
 
 - 代码合并：https://github.com/cyuanxv/feishu-chatgpt-plugin/pull/16
 - 前轮验收：https://github.com/cyuanxv/agent-cockpit-workspace/pull/294
 - Cockpit 任务：tasks/feishu-cloud-delivery-20261011/acceptance-readonly.md、tasks/feishu-full-plan-20261011/acceptance.md、tasks/feishu-calendar-fix-20261011/acceptance.md、tasks/feishu-acceptance-closeout-20261011/acceptance.md。
-- 当前云端部署 appgdep_6acb1b0b1f3081919856fc48d6550b74，源码 1ff62b4c1ec9e9cc2d16e7ffe031013ea2c34e61，环境 revision 16。本轮不重新部署。
+- 当前云端部署 appgdep_6acb23565dec819196f66e0fb781701c，源码 a2c61a53cb6155b62fb52398b9dd5b9529925b38，环境 revision 16；多确认页修复已部署。
 
 本轮四项新增验收只更新证据，不声称整个 M0–M24 全部完成。不新增面试摘要、OCR 等业务扩展。
