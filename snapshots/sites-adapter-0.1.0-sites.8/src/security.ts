@@ -87,11 +87,11 @@ export function browserOrigin(request: Request, env: Env) {
   if (value) assert(value === origin(env), "cross_origin_denied", 403);
 }
 export const enc = new TextEncoder();
-export const b64 = (bytes: Uint8Array) =>
-  btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
+export const b64 = (bytes: Uint8Array) => {
+  let binary = "";
+  for (let i=0; i<bytes.length; i+=8192) binary += String.fromCharCode(...bytes.subarray(i,i+8192));
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+};
 export function unb64(value: string) {
   assert(/^[A-Za-z0-9_-]+$/.test(value), "invalid_encoding");
   let bytes: Uint8Array<ArrayBuffer>;
@@ -131,9 +131,9 @@ export class Vault {
     );
     return `v1.${b64(iv)}.${b64(new Uint8Array(bytes))}`;
   }
-  async open<T>(value: string, binding: string): Promise<T> {
+  async open<T>(value: string, binding: string, maxLength = 200000): Promise<T> {
     try {
-      assert(value.length <= 200000);
+      assert(maxLength <= 1000000 && value.length <= maxLength);
       const [v, iv, data, ...rest] = value.split(".");
       assert(v === "v1" && iv && data && !rest.length);
       const plain = await crypto.subtle.decrypt(

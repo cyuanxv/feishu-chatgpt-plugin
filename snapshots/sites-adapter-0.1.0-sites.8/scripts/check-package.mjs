@@ -15,7 +15,8 @@ assert.deepEqual((await readdir("dist")).sort(), [".openai", "server"]);
 const source = await readFile("dist/server/index.js", "utf8");
 assert(!/from ["']node:|require\(["'](?:node:)?(?:pg|http|fs)/.test(source));
 assert(!/cli_[0-9a-f]{12,}/.test(source));
-assert(source.length < 1000000);
+// Bounded increase for the bundled PDF parser used by cloud attachment verification.
+assert(source.length < 1200000);
 const module = await import(
   "data:text/javascript;base64," + Buffer.from(source).toString("base64")
 );

@@ -23,3 +23,5 @@ export * from "./write-provider.ts";
 export * from "./plan-reads.ts";
 
 export * from "./unified-search.ts";
+
+export { downloadEventAttachment } from "./event-attachments.ts";

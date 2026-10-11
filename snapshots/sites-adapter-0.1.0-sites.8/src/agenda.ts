@@ -197,15 +197,18 @@ export class Agenda {
           "provider_unexpected_pagination",
           502,
         );
+        // The official instanceView response makes items optional for empty views.
+        const rawItems = raw.items === undefined ? [] : raw.items;
+        assert(Array.isArray(rawItems), "provider_invalid_response", 502);
         assert(
-          Array.isArray(raw.items) && raw.items.length <= 200,
+          rawItems.length <= 200,
           "instance_budget_exceeded",
           422,
         );
         const items = z
           .array(event)
           .safeParse(
-            raw.items.filter(
+            rawItems.filter(
               (v: unknown) =>
                 !(
                   v &&

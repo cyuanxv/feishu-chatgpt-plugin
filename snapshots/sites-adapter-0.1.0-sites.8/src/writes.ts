@@ -28,6 +28,7 @@ interface Intent {
   receipt: string | null;
   expires: number;
   created: number;
+  execution_started: number | null;
 }
 export class Writes {
   readonly apps: Apps;
@@ -170,6 +171,10 @@ export class Writes {
         a,
       );
     }
+    if (operation === "cancel_event") {
+      const access = await ctx.link.access(ctx.p, grant.grant_id);
+      await new WriteProvider(this.transport, this.now).inspectCancellation(access.token, a);
+    }
     const id = random(),
       expires = this.now() + 15 * 60000,
       payload = await this.apps.vault.seal(
@@ -226,7 +231,7 @@ export class Writes {
       operation: r.operation,
       status:
         r.status === "executing"
-          ? "unknown"
+          ? (r.execution_started !== null && this.now() - r.execution_started < 300000 ? "executing" : "unknown")
           : r.status === "pending" && r.expires <= this.now()
             ? "expired"
             : r.status,
@@ -328,9 +333,9 @@ export class Writes {
     const access = await ctx.link.access(ctx.p, r.grant_id);
     // Claim and active-grant check are one database statement. Competing confirms cannot send twice.
     const claim = await this.env.DB.prepare(
-      "UPDATE write_intents SET status='executing' WHERE site=? AND owner=? AND intent_id=? AND status='pending' AND expires>? AND EXISTS(SELECT 1 FROM connections WHERE site=? AND user_id=? AND grant_id=? AND status='active') RETURNING intent_id",
+      "UPDATE write_intents SET status='executing',execution_started=? WHERE site=? AND owner=? AND intent_id=? AND status='pending' AND expires>? AND EXISTS(SELECT 1 FROM connections WHERE site=? AND user_id=? AND grant_id=? AND status='active') RETURNING intent_id",
     )
-      .bind(p.site, p.user, id, this.now(), ctx.p.site, ctx.p.user, r.grant_id)
+      .bind(this.now(), p.site, p.user, id, this.now(), ctx.p.site, ctx.p.user, r.grant_id)
       .first();
     if (!claim) return this.describe(p, await this.row(p, id));
     let receipt;

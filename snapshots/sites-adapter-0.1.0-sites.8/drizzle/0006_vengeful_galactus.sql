@@ -1,0 +1,1 @@
+ALTER TABLE `write_intents` ADD `execution_started` integer;

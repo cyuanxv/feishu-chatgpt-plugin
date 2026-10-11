@@ -30,6 +30,7 @@ export class WriteProvider {
     path: string,
     method = "GET",
     body?: unknown,
+    allowEmpty = false,
   ) {
     await this.beforeCall();
     let r: Response;
@@ -61,6 +62,7 @@ export class WriteProvider {
         r.status >= 500 || (r.status >= 300 && r.status < 400),
         typeof raw?.code === "number" ? raw.code : undefined,
       );
+    if (allowEmpty && raw.data === undefined) return {};
     if (!raw.data || typeof raw.data !== "object" || Array.isArray(raw.data))
       throw new WriteFailure("provider_result_unknown", method !== "GET");
     return raw.data;
@@ -96,6 +98,16 @@ export class WriteProvider {
         block_type: 2,
         text: { elements: [{ text_run: { content } }] },
       }));
+  }
+  async inspectCancellation(token: string, a: Record<string, any>) {
+    const data = await this.call(token, this.eventPath(a, a.event_id));
+    const e = data.event;
+    assert(e?.event_id === a.event_id && e.summary === a.summary &&
+      String(e.start_time?.timestamp) === String(Date.parse(a.time_range.start) / 1000) &&
+      String(e.end_time?.timestamp) === String(Date.parse(a.time_range.end) / 1000), "event_changed", 409);
+    // A series deletion is deliberately unsupported; the preview describes one concrete slot.
+    assert(!e.recurrence && !e.recurring_event_id && !e.is_exception, "recurring_event_cancellation_unsupported", 422);
+    return e;
   }
   async inspectBooking(token: string, a: Record<string, any>) {
     assert(
@@ -369,6 +381,22 @@ export class WriteProvider {
           { rsvp_status: a.rsvp_status },
         );
         effects.push({ event_id: a.event_id, rsvp_status: a.rsvp_status });
+      } else if (operation === "cancel_event") {
+        const e = await this.inspectCancellation(token, a);
+        if (e.status !== "cancelled") {
+          await this.call(token, this.eventPath(a, a.event_id) + "?need_notification=" + String(a.need_notification), "DELETE", undefined, true);
+          effects.push({event_id: a.event_id, step: "cancellation_submitted"});
+        }
+        const check = await this.call(token, this.eventPath(a, a.event_id));
+        assert(check.event?.event_id === a.event_id && check.event.status === "cancelled", "cancellation_not_verified", 502);
+        effects.push({event_id: a.event_id, step: "event_cancelled"});
+        if (a.room_id) {
+          const rooms = await this.call(token, "/calendar/v4/freebusy/room_find", "POST", {event_start_time:a.time_range.start,event_end_time:a.time_range.end,time_zone:a.timezone});
+          assert(Array.isArray(rooms.available_rooms), "room_availability_unknown", 502);
+          const released = rooms.available_rooms.some((v:any) => v.room_id === a.room_id);
+          effects.push({room_id:a.room_id, room_status:released ? "available" : "unavailable"});
+          if (!released) status = "partial";
+        }
       } else if (operation === "update_event") {
         const data = await this.call(
           token,

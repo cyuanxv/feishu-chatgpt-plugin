@@ -7,7 +7,7 @@ const options = {
   format: "esm",
   platform: "browser",
   target: "es2022",
-  minify: false,
+  minify: true,
 };
 await build({
   ...options,

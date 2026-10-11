@@ -94,7 +94,7 @@ test("instance changes invalidate continuation instead of duplicating or skippin
   );
 });
 for (const data of [
-  {},
+  {items:null},
   { items: [], has_more: true },
   { items: Array.from({ length: 201 }, (_, i) => instance(i)) },
   { items: [instance(1), instance(1)] },

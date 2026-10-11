@@ -100,6 +100,7 @@ export const writeIntents = sqliteTable(
     payload: text("payload").notNull(),
     status: text("status").notNull(),
     receipt: text("receipt"),
+    executionStarted: integer("execution_started"),
     expires: integer("expires").notNull(),
     created: integer("created").notNull(),
   },
@@ -108,3 +109,7 @@ export const writeIntents = sqliteTable(
     uniqueIndex("write_request_lookup").on(t.site, t.owner, t.requestId),
   ],
 );
+
+export const downloadedAttachments = sqliteTable("downloaded_attachments", {
+  site:text("site").notNull(), owner:text("owner").notNull(), fileId:text("file_id").notNull(), connectionId:text("connection_id").notNull(), grantId:text("grant_id").notNull(), payload:text("payload").notNull(), expires:integer("expires").notNull(),
+}, t=>[primaryKey({columns:[t.site,t.owner,t.fileId]})]);

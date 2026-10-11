@@ -1,3 +1,4 @@
+import { downloadEventAttachment } from "./event-attachments.ts";
 import { z } from "zod";
 import { WRITE_SCOPES } from "./write-contracts.ts";
 import { meetingSlots } from "./meeting-slots.ts";
@@ -271,6 +272,24 @@ export class Apps {
     for (const { ctx, row } of matching) {
       try {
         const access = await ctx.link.access(ctx.p, row.grant_id);
+        if (input.operation === "event_attachment_download") {
+          assert(!input.cursor, "invalid_cursor");
+          const downloaded = await downloadEventAttachment(this.transport, access.token, input.parameters);
+          await this.store.current(ctx.p, row.grant_id);
+          const fileId = await hash(JSON.stringify({owner:p.user, connection:ctx.id, grant:row.grant_id, sha256:downloaded.sha256}));
+          const expires = this.now() + 86400000;
+          const sealed = await this.vault.seal(downloaded, aad(p,"downloaded-attachment",fileId));
+          await this.env.DB.prepare("DELETE FROM downloaded_attachments WHERE site=? AND owner=? AND expires<=?").bind(p.site,p.user,this.now()).run();
+          const count = await this.env.DB.prepare("SELECT COUNT(*) AS n FROM downloaded_attachments WHERE site=? AND owner=? AND file_id<>?").bind(p.site,p.user,fileId).first<{n:number}>();
+          assert((count?.n ?? 0)<10,"attachment_storage_limit",422);
+          await this.env.DB.prepare("INSERT INTO downloaded_attachments(site,owner,file_id,connection_id,grant_id,payload,expires) VALUES(?,?,?,?,?,?,?) ON CONFLICT(site,owner,file_id) DO UPDATE SET payload=excluded.payload,expires=excluded.expires").bind(p.site,p.user,fileId,ctx.id,row.grant_id,sealed,expires).run();
+          const saved = await this.env.DB.prepare("SELECT payload FROM downloaded_attachments WHERE site=? AND owner=? AND file_id=?").bind(p.site,p.user,fileId).first<{payload:string}>();
+          assert(saved,"attachment_storage_failed",503);
+          const verified = await this.vault.open<any>(saved.payload,aad(p,"downloaded-attachment",fileId),1000000);
+          assert(verified.sha256===downloaded.sha256 && verified.base64===downloaded.base64,"attachment_storage_failed",503);
+          const {base64, ...metadata}=downloaded;
+          return {operation:input.operation,data:{...metadata,file_id:fileId,storage:"private_cloud_encrypted",expires_at:new Date(expires).toISOString()},connection_id:ctx.id,partial:false,traversal_complete:true,source:"feishu_api",content_trust:"untrusted_source_data"};
+        }
         const result = await new ReadonlyAPI(
           this.transport,
           this.vault,

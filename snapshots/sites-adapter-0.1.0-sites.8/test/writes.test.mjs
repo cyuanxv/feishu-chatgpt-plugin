@@ -78,6 +78,7 @@ test("two concurrent confirms create exactly once and a completed request return
   const a = w.execute(P, r.intent_id),
     b = w.execute(P, r.intent_id);
   await new Promise((r) => setTimeout(r, 10));
+  assert.equal((await w.review(P, r.intent_id)).status, "executing");
   release();
   const results = await Promise.all([a, b]);
   assert.equal(calls, 1);
@@ -379,3 +380,14 @@ test("refreshing a pending room reservation reads status without another mutatio
 test('maximum supported document preview survives encrypted storage round trip',async()=>{const s=await ready();const w=new Writes(s.env,async()=>{throw Error('preview only')},s.now);const text='文'.repeat(20000);const r=await w.prepare(P,'create_doc',{request_id:crypto.randomUUID(),parameters:{title:'max',text}});assert.equal((await w.review(P,r.intent_id)).parameters.text,text);});
 
 test('omitted room busy intervals require a fresh explicit room-finder match',async()=>{let found=false;const p=new WriteProvider(async(url)=>Response.json({code:0,data:url.includes('room_find')?{available_rooms:found?[{room_id:booking.room_id}]:[]}: {}}));await assert.rejects(()=>p.inspectBooking('synthetic',booking),{code:'room_unavailable'});found=true;await p.inspectBooking('synthetic',booking);});
+
+test('cancel concrete event reads back cancellation and room availability; allows empty delete envelope', async()=>{
+ const a={calendar_id:'cal1',event_id:'event1',summary:'test',time_range:{start:'2026-10-12T10:00:00+08:00',end:'2026-10-12T10:30:00+08:00'},timezone:'Asia/Shanghai',room_id:'omm_room',need_notification:false};
+ let deleted=false; const event=()=>({event_id:a.event_id,summary:a.summary,start_time:{timestamp:String(Date.parse(a.time_range.start)/1000)},end_time:{timestamp:String(Date.parse(a.time_range.end)/1000)},recurrence:'',status:deleted?'cancelled':'confirmed'});
+ const calls=[];const provider=new WriteProvider(async(u,i)=>{calls.push([u,i.method]);if(i.method==='DELETE'){deleted=true;return Response.json({code:0});}return Response.json({code:0,data:u.includes('room_find')?{available_rooms:[{room_id:a.room_id}]}:{event:event()}})});
+ const r=await provider.execute('t','cancel_event',writeInput('cancel_event',a),crypto.randomUUID());assert.equal(r.status,'succeeded');assert.equal(r.effects.at(-1).room_status,'available');assert.equal(calls.filter(v=>v[1]==='DELETE').length,1);
+});
+test('changed or recurring event cannot be cancelled',async()=>{
+ const a={calendar_id:'cal1',event_id:'event1',summary:'test',time_range:{start:'2026-10-12T10:00:00+08:00',end:'2026-10-12T10:30:00+08:00'},timezone:'Asia/Shanghai',need_notification:false};
+ for(const recurrence of ['', 'FREQ=DAILY']){let writes=0;const w=new WriteProvider(async(u,i)=>{if(i.method!=='GET')writes++;return Response.json({code:0,data:{event:{event_id:'event1',summary:recurrence?'test':'changed',start_time:{timestamp:String(Date.parse(a.time_range.start)/1000)},end_time:{timestamp:String(Date.parse(a.time_range.end)/1000)},recurrence}}})});assert.equal((await w.execute('t','cancel_event',a,crypto.randomUUID())).status,'failed');assert.equal(writes,0);}
+});
