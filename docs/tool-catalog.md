@@ -1,4 +1,4 @@
-> 2026-10-11 更新：下文保留历史 Node/Postgres 阶段证据。当前私有 Sites 实现在 [完整规划进度](../snapshots/sites-adapter-0.1.0-sites.8/docs/FULL-PLAN-PROGRESS.md)，新增 30 工具路由与会议室预订候选，真实验收按项记录，不能将下表直接视为当前云端状态。
+> 2026-10-11 更新：下文保留历史 Node/Postgres 阶段证据。当前私有 Sites 实现在 [完整规划进度](../snapshots/sites-adapter-0.1.0-sites.8/docs/FULL-PLAN-PROGRESS.md)，30 个原规划工具已接入，会议室预订取消闭环已实测，真实验收按项记录，不能将下表直接视为当前云端状态。
 
 # Tool traceability
 

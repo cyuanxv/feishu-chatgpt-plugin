@@ -1,3 +1,5 @@
+> 历史 Node/Postgres 阶段的后续计划。当前私有 Sites 版本写入已启用、已部署并合并；下一步以 [统一完成清单](../snapshots/sites-adapter-0.1.0-sites.8/docs/FULL-PLAN-PROGRESS.md) 的待办为准，不再沿用下文“十三项写工具仍保持关闭”的历史状态。
+
 # 真实接通前的下一步
 
 当前是可审查的开源开发稿。云端已有 synthetic MCP、17 条只读路由和离线 SDK/数据库/安全测试。dev10 另有只开放 get_agenda 的 HTTP 候选，校验数据库中的 Bearer grant、账户代际和实际飞书日历权限；测试使用合成授权和注入式飞书传输。dev11 补了独立的飞书网页登录/明确同意及持久 OAuth 发行器候选，合成 HTTP 测试已能从授权走到日程读取。尚未连接真实飞书、安装到 ChatGPT、部署生产服务或申请官方目录。不是“只差一个密钥”。

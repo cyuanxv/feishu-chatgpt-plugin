@@ -1,3 +1,5 @@
+> 当前完成度以 [统一完成清单](FULL-PLAN-PROGRESS.md) 为准；下文的 277 测试/Node 23 是历史干净安装记录。后续 Node 22/24 CI 已通过，新租户部署仍未验证。
+
 # 完整工具运行与验收
 
 ## 开关与授权
@@ -38,4 +40,4 @@ CI 对快照运行离线回归；干净新租户部署、外部模型评测、�
 
 ## 干净源码安装验证（2026-10-11）
 
-将 check:source --list 的 95 个允许文件复制至独立目录，没有复制 node_modules、测试构建、dist 或密钥。系统 Node v23.6.1 执行 npm ci --ignore-scripts、typecheck、npm test、check:package 成功，277 测试通过；单独安装 runtime-check 后 check:workerd 的 19 项检查通过。没有 Feishu 实际请求、注册新站点或验证 Sites dispatcher。此证据仅证明该环境可从源码重建，不证明 Node 22 CI 或新租户部署完成。
+将 check:source --list 的 95 个允许文件复制至独立目录，没有复制 node_modules、测试构建、dist 或密钥。系统 Node v23.6.1 执行 npm ci --ignore-scripts、typecheck、npm test、check:package 成功，277 测试通过；单独安装 runtime-check 后 check:workerd 的 19 项检查通过。没有 Feishu 实际请求、注册新站点或验证 Sites dispatcher。此证据仅证明该环境可从源码重建；后续 Node 22/24 CI 已通过，但新租户部署仍未完成。
