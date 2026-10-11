@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assert } from "./security.ts";
 import { timeRange } from "./extended-reads.ts";
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
-const calendar = z.string().regex(/^[A-Za-z0-9_.@+-]{1,256}$/);
+const calendar = z.string().regex(/^[A-Za-z0-9_.@+-]{1,256}$/).refine(v => v !== "." && v !== "..");
 const text = z.string().min(1).max(20000);
 const documentText = text.refine(
   (v) => v.split("\n").length <= 50,
@@ -106,6 +106,7 @@ export const WRITE_SCHEMAS: Record<string, z.ZodType> = {
       (v) => !!v.time_range === !!v.timezone,
       "Time changes require both time_range and timezone",
     ),
+  cancel_event: z.object({ calendar_id: calendar, event_id: id, summary: eventFields.summary, time_range: timeRange, timezone: eventFields.timezone, room_id: z.string().regex(/^omm_[A-Za-z0-9_-]+$/).optional(), need_notification: z.boolean().default(true) }).strict(),
   respond_event: z
     .object({
       calendar_id: calendar,
@@ -165,6 +166,7 @@ export const WRITE_REQUIREMENTS: Record<string, string[][]> = {
   update_base_record: [["bitable:app", "base:record:update"]],
   create_event: [["calendar:calendar.event:create", "calendar:calendar"]],
   update_event: [["calendar:calendar.event:update", "calendar:calendar"]],
+  cancel_event: [["calendar:calendar.event:delete", "calendar:calendar"], ["calendar:calendar.event:read", "calendar:calendar:readonly", "calendar:calendar"]],
   respond_event: [["calendar:calendar.event:reply", "calendar:calendar"]],
   create_task: [["task:task:write", "task:task:writeonly"]],
   update_task: [["task:task:write", "task:task:writeonly"]],
@@ -199,6 +201,7 @@ export function writeRequirements(operation: string, a: Record<string, any>) {
   if (operation === "book_meeting_room" && a.event_id) r = r.slice(1);
   if (operation === "create_event" && a.attendee_ids.length)
     r.push(["calendar:calendar.event:update", "calendar:calendar"]);
+  if (operation === "cancel_event" && a.room_id) r.push(["calendar:calendar.free_busy:read", "calendar:calendar:readonly", "calendar:calendar"]);
   return r;
 }
 export const WRITE_TOOLS = Object.entries(WRITE_SCHEMAS).map(
@@ -221,6 +224,7 @@ export const WRITE_TOOLS = Object.entries(WRITE_SCHEMAS).map(
         "update_doc",
         "update_base_record",
         "update_event",
+        "cancel_event",
         "update_task",
         "complete_task",
       ].includes(name),
