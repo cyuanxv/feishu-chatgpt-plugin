@@ -1,4 +1,5 @@
 import "./runtime.ts";
+import {queryPage,queryScript} from "./query-ui.ts";
 import {
   AppError,
   boundedText,
@@ -147,6 +148,7 @@ export function createWorker(
     async fetch(request: Request, env: Env): Promise<Response> {
       try {
         const url = new URL(request.url);
+        if(['/query','/query.js'].includes(url.pathname)) {principal(request,env);assert(docxEnabled(env),'not_found',404);assert(request.method==='GET','method_not_allowed',405);return new Response(url.pathname==='/query'?queryPage:queryScript,{headers:{...headers,'Content-Type':url.pathname==='/query'?'text/html; charset=utf-8':'text/javascript; charset=utf-8'}}); }
         const synthetic = dataMode(env) === "synthetic";
         assert(url.origin === origin(env), "invalid_origin", 403);
         assert(
@@ -419,8 +421,8 @@ export function createWorker(
           return response({ error: "not_found" }, 404);
         }
         if(url.pathname === '/api/query') {
-          assert(docxEnabled(env),'not_found',404);assert(request.method==='POST','method_not_allowed',405);sameOrigin(request,env);assert(configured(env),'configuration_required',503);
-          const args=await requestJSON(request);await store.rate(await hash(aad(p,'agenda-rate')),now(),60);return response(await apps.query(p,args));
+          assert(docxEnabled(env),'not_found',404);assert(['GET','POST'].includes(request.method),'method_not_allowed',405);if(request.method==='POST')sameOrigin(request,env);else browserOrigin(request,env);assert(configured(env),'configuration_required',503);
+          const args=request.method==='POST'?await requestJSON(request):{operation:url.searchParams.get('operation'),parameters:JSON.parse(url.searchParams.get('parameters')??'{}'),...(url.searchParams.has('connection_id')?{connection_id:url.searchParams.get('connection_id')}:{ }),...(url.searchParams.has('cursor')?{cursor:url.searchParams.get('cursor')}:{})};await store.rate(await hash(aad(p,'agenda-rate')),now(),60);return response(await apps.query(p,args));
         }
         if (["/api/docx/search", "/api/docx/fetch"].includes(url.pathname)) {
           assert(docxEnabled(env), "not_found", 404);
