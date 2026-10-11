@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "miniflare": "^4.20260730.0"
+  },
+  "name": "feishu-sites-runtime-validation"
+}
