@@ -1,7 +1,7 @@
 import { OAUTH_SOURCE_VERSION } from "./oauth-wire.ts";
 import { safeProviderLogId } from "./provider-diagnostics.ts";
 export const page = (synthetic = false) =>
-  `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>飞书日程</title><link rel="stylesheet" href="/style.css"></head><body><main><p class="eyebrow">PRIVATE · READ ONLY</p><h1>飞书日程</h1><p>${synthetic ? "仅合成演示：这里展示虚构日程，尚未连接飞书。" : "连接你的飞书账户，在 ChatGPT 中读取你有权限查看的日程。"}</p><section><h2 id="status">正在检查连接</h2><p id="detail" role="status"></p><form id="connect-form" method="post" action="/api/feishu/connect" enctype="application/x-www-form-urlencoded"><input id="connect-csrf" type="hidden" name="csrf" value=""><button id="connect" type="submit" ${synthetic ? "hidden" : ""} disabled>连接飞书</button></form><button id="disconnect" hidden>断开连接</button><button id="refresh-token" hidden>检查连接续期</button><button id="demo" ${synthetic ? "" : "hidden"}>查看合成日程</button><div id="demo-result" role="status"></div></section><section id="documents" hidden><h2>搜索 DOCX 文档</h2><p>仅搜索 DOCX，读取纯文本；不包含知识库页面、附件或表格。</p><form id="doc-search"><label for="doc-query">关键词（最多 30 字）</label><input id="doc-query" required maxlength="60"><button type="submit">搜索文档</button></form><div id="doc-results"></div><button id="doc-more" hidden>更多结果</button><pre id="doc-content" role="status"></pre><button id="doc-next" hidden>继续读取</button></section><p class="note">${synthetic ? "本演示不会向飞书发送请求。数据来源会明确标为 synthetic_fixture。" : "支持读取日程；文档功能开启并授权后，可在聊天中搜索和读取 DOCX 纯文本。授权记录加密保存，断开后不再读取该账户。"}</p></main><script src="/ui.js" defer></script></body></html>`;
+  `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>飞书日程</title><link rel="stylesheet" href="/style.css"></head><body><main><p class="eyebrow">PRIVATE · READ ONLY</p><h1>飞书日程</h1><p>${synthetic ? "仅合成演示：这里展示虚构日程，尚未连接飞书。" : "连接你的飞书账户，在 ChatGPT 中读取你有权限查看的日程。"}</p><section><h2 id="status">正在检查连接</h2><p id="detail" role="status"></p><form id="connect-form" method="post" action="/api/feishu/connect" enctype="application/x-www-form-urlencoded"><input id="connect-csrf" type="hidden" name="csrf" value=""><button id="connect" type="submit" ${synthetic ? "hidden" : ""} disabled>连接飞书</button><button id="connect-documents" type="submit" formaction="/api/feishu/connect-documents" hidden>连接日程并授权文档</button></form><button id="disconnect" hidden>断开连接</button><button id="refresh-token" hidden>检查连接续期</button><button id="demo" ${synthetic ? "" : "hidden"}>查看合成日程</button><div id="demo-result" role="status"></div></section><section id="apps" hidden><h2>飞书应用连接</h2><p>自动识别应用已开通的权限；每个应用仍需单独完成用户授权。</p><div id="app-list"></div><form id="app-add"><label for="app-id">App ID</label><input id="app-id" required autocomplete="off"><label for="app-label">连接名称</label><input id="app-label" required maxlength="60"><label for="app-secret">App Secret（仅加密保存，不回显）</label><input id="app-secret" type="password" required autocomplete="new-password"><button type="submit">安全保存并查询权限</button></form><p id="app-message" role="status"></p></section><section id="documents" hidden><h2>搜索 DOCX 文档</h2><p>仅搜索 DOCX，读取纯文本；不包含知识库页面、附件或表格。</p><form id="doc-search"><label for="doc-query">关键词（最多 30 字）</label><input id="doc-query" required maxlength="60"><button type="submit">搜索文档</button></form><div id="doc-results"></div><button id="doc-more" hidden>更多结果</button><pre id="doc-content" role="status"></pre><button id="doc-next" hidden>继续读取</button></section><p class="note">${synthetic ? "本演示不会向飞书发送请求。数据来源会明确标为 synthetic_fixture。" : "支持读取日程；文档功能开启并授权后，可在聊天中搜索和读取 DOCX 纯文本。授权记录加密保存，断开后不再读取该账户。"}</p></main><script src="/ui.js" defer></script></body></html>`;
 export const css = `:root{font:17px/1.6 system-ui,sans-serif;color:#152136;background:#edf3fc}body{margin:0}main{max-width:600px;margin:8vh auto;padding:32px}.eyebrow{font-size:13px;letter-spacing:.12em;color:#375cc4}h1{font-size:40px;line-height:1.2}h2{font-size:21px}section{margin:32px 0;padding:28px;background:white;border:1px solid #cdd9ed;border-radius:16px}button{padding:12px 20px;margin:8px 12px 0 0;border:0;border-radius:8px;font:inherit;background:#2457d5;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}button[hidden]{display:none}#disconnect{background:#e9eef9;color:#152136}.note{font-size:14px;color:#506176}pre{white-space:pre-wrap;overflow-wrap:anywhere}input{box-sizing:border-box;max-width:100%;padding:8px;font:inherit}textarea{box-sizing:border-box;width:100%;font:14px/1.5 ui-monospace,monospace;resize:vertical}button:focus-visible{outline:3px solid #ffb83f;outline-offset:3px}@media(max-width:600px){main{margin:3vh auto;padding:24px}}`;
 export const script = `
 const status=document.querySelector('#status');
@@ -23,6 +23,9 @@ async function refresh(){
   const response=await fetch('/api/status',{cache:'no-store'});
   const value=await readJSON(response,'暂时无法读取连接状态，请刷新后重试');
   snapshot=value;
+  document.querySelector('#apps').hidden=value.data_mode==='synthetic';
+  document.querySelector('#connect-documents').hidden=!value.docx_enabled;
+  document.querySelector('#connect-documents').disabled=!value.configured;
   document.querySelector('#documents').hidden=!(value.docx_enabled&&value.docx_authorized&&value.connected);
   connectCsrf.value=typeof value.csrf==='string'?value.csrf:'';
   if(value.data_mode==='synthetic'){
@@ -32,9 +35,10 @@ async function refresh(){
   status.textContent=value.connected?'已连接 '+value.account_name:'尚未连接';
   detail.textContent=value.configured?'连接后可在 ChatGPT 使用日程读取工具':'正在等待安全配置';
   connect.disabled=!value.configured;connect.textContent=value.connected?'重新连接飞书':'连接飞书';
-  if(value.docx_enabled){detail.textContent=value.docx_authorized?'已授权日程和 DOCX 文档只读，可在聊天中搜索和读取文档':'日程连接保持可用。点击下方按钮追加文档搜索和读取授权。';if(value.connected&&!value.docx_authorized)connect.textContent='追加文档只读授权';}
+  if(value.docx_enabled){detail.textContent=value.docx_authorized?'已授权日程和 DOCX 文档只读，可在聊天中搜索和读取文档':'日程连接保持可用。点击下方按钮追加文档搜索和读取授权。';connect.textContent='仅连接日程';}
   disconnect.hidden=!value.grant_id;document.querySelector('#refresh-token').hidden=!value.connected;
   demo.hidden=!value.connected;demo.textContent="查看未来 7 天日程";
+  if(value.configured)await refreshApps();
 }
 async function action(path,body){
   if(busy||!snapshot||snapshot.data_mode==='synthetic')return;
@@ -60,7 +64,7 @@ async function showDemo(){
   finally{busy=false;demo.disabled=false;}
 }
 async function showAgenda(){
-  if(!snapshot?.connected)return;
+  if(!snapshot)return;
   busy=true;demo.disabled=true;
   try{
     const start=new Date();
@@ -73,7 +77,7 @@ async function showAgenda(){
   }catch(error){result.textContent=error.message;}
   finally{busy=false;demo.disabled=false;}
 }
-let docQuery='', searchCursor=null, resultId=null, contentCursor=null;
+let docQuery='', searchCursor=null, resultId=null, contentCursor=null, docConnection=null;
 const docResults=document.querySelector('#doc-results'), docContent=document.querySelector('#doc-content'), docMore=document.querySelector('#doc-more'), docNext=document.querySelector('#doc-next');
 async function docRequest(path,args){
   const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args)});
@@ -83,14 +87,15 @@ async function docRequest(path,args){
 }
 async function readDoc(id,more=false){
   if(busy)return;busy=true;
-  try{const value=await docRequest('/api/docx/fetch',{result_id:id,...(more?{cursor:contentCursor}:{})});resultId=id;contentCursor=value.next_cursor;docContent.textContent=(more?docContent.textContent:'')+value.content;docNext.hidden=!contentCursor;}
+  try{const value=await docRequest('/api/docx/fetch',{result_id:id,...(docConnection?{connection_id:docConnection}:{}),...(more?{cursor:contentCursor}:{})});resultId=id;contentCursor=value.next_cursor;docContent.textContent=(more?docContent.textContent:'')+value.content;docNext.hidden=!contentCursor;}
   catch(e){docContent.textContent=e.message;docNext.hidden=true;}
   finally{busy=false;}
 }
 async function searchDocs(more=false){
   if(busy)return;busy=true;
   if(!more){docQuery=document.querySelector('#doc-query').value;searchCursor=null;docResults.replaceChildren();docContent.textContent='';docNext.hidden=true;}
-  try{const value=await docRequest('/api/docx/search',{query:docQuery,page_size:5,...(more?{cursor:searchCursor}:{})});
+  try{const value=await docRequest('/api/docx/search',{query:docQuery,page_size:5,...(more?{cursor:searchCursor,connection_id:docConnection}:{})});
+    docConnection=value.connection_id??null;
     for(const item of value.results){const button=document.createElement('button');button.textContent=item.title||'无标题文档';button.addEventListener('click',()=>readDoc(item.result_id));docResults.append(button);}
     searchCursor=value.next_cursor;docMore.hidden=!searchCursor;if(!value.results.length&&!more)docContent.textContent='没有匹配的 DOCX 文档。';
   }catch(e){docContent.textContent=e.message;docMore.hidden=true;}
@@ -98,6 +103,28 @@ async function searchDocs(more=false){
 }
 document.querySelector('#doc-search').addEventListener('submit',event=>{event.preventDefault();searchDocs();});
 docMore.addEventListener('click',()=>searchDocs(true));docNext.addEventListener('click',()=>readDoc(resultId,true));
+async function refreshApps(){
+  const value=await readJSON(await fetch('/api/apps',{cache:'no-store'}),'无法读取应用连接');
+  const list=document.querySelector('#app-list');list.replaceChildren();
+  for(const app of value.connections){
+    const row=document.createElement('div'), label=document.createElement('p');label.textContent=app.label+' · '+(app.connected?'已连接 '+app.account_name:'待授权')+' · 已授权 '+app.granted_scopes.length+' 项';row.append(label);
+    const form=document.createElement('form');form.method='post';form.action='/api/apps/connect';
+    for(const [name,value] of Object.entries({csrf:snapshot.csrf,connection_id:app.connection_id})){const field=document.createElement('input');field.type='hidden';field.name=name;field.value=value;form.append(field);}
+    const button=document.createElement('button');button.type='submit';button.textContent='授权 '+app.label;form.append(button);row.append(form);
+    if(app.connected){const renew=document.createElement('button');renew.textContent='检查 '+app.label+' 续期';renew.addEventListener('click',()=>action('/api/apps/refresh',{connection_id:app.connection_id,grant_id:app.grant_id,epoch:app.epoch}));row.append(renew);
+    const remove=document.createElement('button');remove.textContent='断开 '+app.label;remove.addEventListener('click',()=>action('/api/apps/disconnect',{connection_id:app.connection_id,grant_id:app.grant_id,epoch:app.epoch}));row.append(remove);}
+    list.append(row);
+  }
+  const docs=value.connections.some(a=>a.connected&&a.granted_scopes.includes('search:docs:read')&&a.granted_scopes.includes('docx:document:readonly'));
+  document.querySelector('#documents').hidden=!snapshot.docx_enabled||!docs;
+  demo.hidden=!value.connections.some(a=>a.connected&&a.granted_scopes.includes('calendar:calendar:read')&&a.granted_scopes.includes('calendar:calendar.event:read'));
+}
+document.querySelector('#app-add').addEventListener('submit',async event=>{
+  event.preventDefault();if(busy||!snapshot)return;busy=true;
+  const secret=document.querySelector('#app-secret'), message=document.querySelector('#app-message');
+  try{const response=await fetch('/api/apps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:snapshot.csrf,app_id:document.querySelector('#app-id').value.trim(),label:document.querySelector('#app-label').value.trim(),app_secret:secret.value})});secret.value='';const value=await response.json();if(!response.ok)throw Error(/^[a-z_]{1,80}$/.test(value.error)?value.error:'save_failed');message.textContent='已加密保存。飞书 API 查询到 '+value.permission_count+' 项权限，请点击该连接的授权按钮。';await refresh();}
+  catch(e){message.textContent='保存未完成：'+e.message;}finally{secret.value='';busy=false;}
+});
 demo.addEventListener('click',showDemo);
 connectForm.addEventListener('submit',event=>{
   if(busy||!snapshot||snapshot.data_mode==='synthetic'||!snapshot.configured||!connectCsrf.value){event.preventDefault();return;}

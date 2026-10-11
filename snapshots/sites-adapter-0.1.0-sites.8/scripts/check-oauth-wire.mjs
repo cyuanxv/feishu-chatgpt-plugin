@@ -320,6 +320,7 @@ async function uiVM(user) {
       "connect",
       "connect-form",
       "connect-csrf",
+      "connect-documents",
       "disconnect",
       "demo",
       "demo-result",
@@ -330,10 +331,11 @@ async function uiVM(user) {
       "doc-results",
       "doc-content",
       "doc-more",
-      "doc-next",
+      "doc-next", "apps", "app-list", "app-add", "app-id", "app-label", "app-secret", "app-message",
     ].map((id) => [
       "#" + id,
       {
+        replaceChildren() {}, append() {},
         textContent: "",
         hidden: false,
         disabled: false,
@@ -341,7 +343,7 @@ async function uiVM(user) {
         addEventListener(event, handler) {
           assert.equal(
             event,
-            ["connect-form", "doc-search"].includes(id) ? "submit" : "click",
+            ["connect-form", "doc-search", "app-add"].includes(id) ? "submit" : "click",
           );
           this.listeners.push(handler);
         },
@@ -353,6 +355,7 @@ async function uiVM(user) {
   let cookie;
   const context = {
     document: {
+      createElement() { return {append(){},addEventListener(){}}; },
       querySelector(selector) {
         assert(nodes[selector]);
         return nodes[selector];
@@ -794,6 +797,7 @@ try {
           },
         },
         document: {
+      createElement() { return {append(){},addEventListener(){}}; },
           querySelector(selector) {
             return {
               "#error-receipt": receipt,

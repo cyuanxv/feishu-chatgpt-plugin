@@ -1,6 +1,6 @@
 {
   "name": "feishu-sites-agenda",
-  "version": "0.1.0-sites.14",
+  "version": "0.1.0-sites.17",
   "private": true,
   "type": "module",
   "description": "Private Sites single-agenda Feishu connector candidate",

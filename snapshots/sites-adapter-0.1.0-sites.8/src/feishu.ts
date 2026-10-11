@@ -47,8 +47,11 @@ export const DOCX_SCOPES = [
 ] as const;
 export const docxEnabled = (env: Env) =>
   dataMode(env) === "feishu" && env.FEISHU_DOCX_ENABLED === "true";
+export const minimumScopes = (env: Env): readonly string[] =>
+  env.FEISHU_OAUTH_SCOPES ? ["offline_access"] : SCOPES;
 export const requestedScopes = (env: Env): readonly string[] =>
-  docxEnabled(env) ? [...SCOPES, ...DOCX_SCOPES] : SCOPES;
+  env.FEISHU_OAUTH_SCOPES ??
+  (docxEnabled(env) ? [...SCOPES, ...DOCX_SCOPES] : SCOPES);
 export interface Tokens {
   access_token: string;
   refresh_token: string;
@@ -59,7 +62,7 @@ export interface Tokens {
 export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 const tokenSchema = z.object({
   access_token: z.string().min(1).max(8192),
-  refresh_token: z.string().min(1).max(8192),
+  refresh_token: z.string().min(1).max(65536),
   token_type: z.string().refine((v) => v.toLowerCase() === "bearer"),
   expires_in: z.number().finite().positive().max(31536000),
   refresh_token_expires_in: z.number().finite().positive().max(31536000),
@@ -193,7 +196,7 @@ export class Feishu {
     const binding = { ...input.binding };
     const scopes = binding.scope.split(" ");
     assert(
-      SCOPES.every((s) => scopes.includes(s)) &&
+      minimumScopes(this.env).every((s) => scopes.includes(s)) &&
         scopes.every((s) => requestedScopes(this.env).includes(s)),
       "provider_scope_changed",
       401,
@@ -275,6 +278,7 @@ export class Feishu {
         JSON.stringify({
           event: "feishu_token_shape_failure",
           refresh: data.grant_type === "refresh_token",
+          issues: parsed.error.issues.map(i => ({field: String(i.path[0]), code: i.code})),
           fields: parsed.error.issues
             .map((i) => String(i.path[0]))
             .filter((v) =>
@@ -292,19 +296,21 @@ export class Feishu {
     assert(parsed.success, "provider_authorization_required", 401);
     const scopes = [...new Set(parsed.data.scope.split(" ").filter(Boolean))];
     if (
-      !SCOPES.every((s) => scopes.includes(s)) ||
+      !minimumScopes(this.env).every((s) => scopes.includes(s)) ||
       !scopes.every((s) => allowed.includes(s))
     )
       console.warn(
         JSON.stringify({
           event: "feishu_token_scope_failure",
           refresh: data.grant_type === "refresh_token",
-          missing_required: !SCOPES.every((s) => scopes.includes(s)),
+          missing_required: !minimumScopes(this.env).every((s) =>
+            scopes.includes(s),
+          ),
           has_unrequested: !scopes.every((s) => allowed.includes(s)),
         }),
       );
     assert(
-      SCOPES.every((s) => scopes.includes(s)) &&
+      minimumScopes(this.env).every((s) => scopes.includes(s)) &&
         scopes.every((s) => allowed.includes(s)),
       "provider_scope_changed",
       401,
@@ -375,6 +381,10 @@ export class Feishu {
         open_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
         tenant_key: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
         name: z.string().max(100).optional(),
+        union_id: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,128}$/)
+          .optional(),
       })
       .safeParse(raw);
     assert(parsed.success, "provider_identity_invalid", 401);

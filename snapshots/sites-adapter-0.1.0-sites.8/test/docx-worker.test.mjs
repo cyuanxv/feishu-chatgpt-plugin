@@ -56,7 +56,7 @@ test("enabling DOCX preserves old calendar grant and denies document transport w
 test("expanded scope is bound to OAuth flow, supports MCP search/fetch and refresh, retains agenda", async () => {
   const s = await setup();
   expanded(s);
-  const flow = await s.begin();
+  const flow = await s.begin(P.user, true);
   assert.deepEqual(flow.url.searchParams.get("scope").split(" "), all);
   assert.equal((await s.callback(flow)).status, 303);
   assert.equal((await s.status()).docx_authorized, true);
@@ -128,7 +128,7 @@ test("old pending OAuth stays calendar-only after enable; disable rejects expand
   assert.equal((await s.callback(old)).status, 303);
   const grant = (await s.status()).grant_id;
   expanded(s);
-  const newer = await s.begin();
+  const newer = await s.begin(P.user, true);
   s.env.FEISHU_DOCX_ENABLED = "false";
   assert.equal((await s.callback(newer)).status, 401);
   assert.equal((await s.status()).grant_id, grant);

@@ -15,6 +15,7 @@ export interface Grant {
   grant_id: string;
   tenant_key: string;
   open_id: string;
+  union_id?: string | null;
   display_name: string;
   credentials: string | null;
   scopes: string;
@@ -131,9 +132,9 @@ export class Store {
   ) {
     const result = await this.db
       .prepare(
-        `INSERT INTO connections(site,user_id,grant_id,tenant_key,open_id,display_name,credentials,scopes,expires,refresh_expires,status,version,lease_until)
-    SELECT ?,?,?,?,?,?,?,?,?,?,'active',1,0 WHERE EXISTS(SELECT 1 FROM owners WHERE site=? AND user_id=? AND epoch=?)
-    ON CONFLICT(site,user_id) DO UPDATE SET grant_id=excluded.grant_id,tenant_key=excluded.tenant_key,open_id=excluded.open_id,display_name=excluded.display_name,credentials=excluded.credentials,scopes=excluded.scopes,expires=excluded.expires,refresh_expires=excluded.refresh_expires,status='active',version=connections.version+1,lease=NULL,lease_until=0 RETURNING *`,
+        `INSERT INTO connections(site,user_id,grant_id,tenant_key,open_id,union_id,display_name,credentials,scopes,expires,refresh_expires,status,version,lease_until)
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,'active',1,0 WHERE EXISTS(SELECT 1 FROM owners WHERE site=? AND user_id=? AND epoch=?)
+    ON CONFLICT(site,user_id) DO UPDATE SET grant_id=excluded.grant_id,tenant_key=excluded.tenant_key,open_id=excluded.open_id,union_id=excluded.union_id,display_name=excluded.display_name,credentials=excluded.credentials,scopes=excluded.scopes,expires=excluded.expires,refresh_expires=excluded.refresh_expires,status='active',version=connections.version+1,lease=NULL,lease_until=0 RETURNING *`,
       )
       .bind(
         p.site,
@@ -141,6 +142,7 @@ export class Store {
         row.grant_id,
         row.tenant_key,
         row.open_id,
+        row.union_id ?? null,
         row.display_name,
         row.credentials,
         row.scopes,

@@ -9,7 +9,7 @@ import {
 } from "./security.ts";
 import { Store } from "./store.ts";
 import { Linking } from "./linking.ts";
-import { Feishu } from "./feishu.ts";
+import { Feishu, SCOPES } from "./feishu.ts";
 const id = z
   .string()
   .regex(/^[A-Za-z0-9_.@+-]{1,256}$/)
@@ -98,6 +98,7 @@ export class Agenda {
     assert(parsed.success);
     const input = parsed.data;
     const connection = await this.store.current(p);
+    assert(SCOPES.every(s => JSON.parse(connection.scopes).includes(s)), "provider_scope_changed", 401);
     const fingerprint = await hash(
       JSON.stringify({
         time_range: input.time_range,

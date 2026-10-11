@@ -1,6 +1,7 @@
 import "./runtime.ts";
 import {
   AppError,
+  boundedText,
   assert,
   principal,
   origin,
@@ -18,6 +19,7 @@ import {
   safeError,
   type Env,
 } from "./security.ts";
+import { Apps } from "./apps.ts";
 import { Store } from "./store.ts";
 import {
   Feishu,
@@ -77,6 +79,7 @@ export const TOOL = {
   inputSchema: {
     type: "object",
     properties: {
+      connection_id: { type: "string", maxLength: 80 },
       time_range: {
         type: "object",
         properties: {
@@ -108,6 +111,7 @@ export const DOCX_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        connection_id: { type: "string", maxLength: 80 },
         query: { type: "string", minLength: 1, maxLength: 30 },
         page_size: { type: "integer", minimum: 1, maximum: 5 },
         cursor: { type: "string", maxLength: 4000 },
@@ -124,6 +128,7 @@ export const DOCX_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        connection_id: { type: "string", maxLength: 80 },
         result_id: { type: "string", maxLength: 4000 },
         max_chars: { type: "integer", minimum: 1, maximum: 2000 },
         cursor: { type: "string", maxLength: 4000 },
@@ -194,6 +199,7 @@ export function createWorker(
         const vault = new Vault(env.APP_ENCRYPTION_KEY);
         const api = new Feishu(env, deps.fetcher, now);
         const link = new Linking(env, store, vault, api, now);
+        const apps = new Apps(env, deps.fetcher, now);
         if (url.pathname === "/mcp") {
           assert(request.method === "POST", "method_not_allowed", 405);
           browserOrigin(request, env);
@@ -283,30 +289,13 @@ export function createWorker(
             );
             assert(synthetic || configured(env), "configuration_required", 503);
             await store.rate(await hash(aad(p, "agenda-rate")), now(), 60);
-            const docx = new DocxCandidate(
-              new DocxCandidateProvider(
-                deps.fetcher ?? globalThis.fetch.bind(globalThis),
-              ),
-              createDocxD1Access(store, link),
-              vault,
-              now,
-              "feishu_api",
-            );
-            const result =
-              body.params.name === "search_docx"
-                ? await docx.search(p, body.params.arguments ?? {})
-                : body.params.name === "fetch_docx"
-                  ? await docx.fetch(p, body.params.arguments ?? {})
-                  : synthetic
-                    ? await syntheticAgenda(
-                        env.DB,
-                        p,
-                        body.params.arguments ?? {},
-                      )
-                    : await new Agenda(store, link, api, vault, now).read(
-                        p,
-                        body.params.arguments ?? {},
-                      );
+            const result = synthetic
+              ? await syntheticAgenda(env.DB, p, body.params.arguments ?? {})
+              : await apps.read(
+                  p,
+                  String(body.params.name),
+                  body.params.arguments ?? {},
+                );
             return response({
               jsonrpc: "2.0",
               id,
@@ -350,6 +339,84 @@ export function createWorker(
           }
         }
         const p = principal(request, env);
+        if (url.pathname.startsWith("/api/apps")) {
+          assert(!synthetic && configured(env), "configuration_required", 503);
+          if (url.pathname === "/api/apps" && request.method === "GET")
+            return response({ connections: await apps.list(p) });
+          assert(request.method === "POST", "method_not_allowed", 405);
+          sameOrigin(request, env);
+          const body =
+            url.pathname === "/api/apps/connect"
+              ? Object.fromEntries(
+                  new URLSearchParams(
+                    await boundedText(new Response(request.body), 32768),
+                  ),
+                )
+              : await requestJSON(request);
+          object(body, [
+            "csrf",
+            "app_id",
+            "app_secret",
+            "label",
+            "connection_id",
+            "grant_id",
+            "epoch",
+          ]);
+          assert(typeof body.csrf === "string");
+          const csrf = await vault.open<{ expires: number }>(
+            body.csrf,
+            aad(p, "csrf"),
+          );
+          assert(
+            csrf.expires > now() && csrf.expires <= now() + 600000,
+            "csrf_expired",
+          );
+          await store.rate(await hash(aad(p, "connection-rate")), now(), 10);
+          if (url.pathname === "/api/apps") {
+            const { csrf: ignored, ...input } = body;
+            return response(await apps.add(p, input));
+          }
+          object(body, ["csrf", "connection_id", "grant_id", "epoch"]);
+          assert(typeof body.connection_id === "string");
+          const ctx = await apps.context(p, body.connection_id);
+          if (url.pathname === "/api/apps/connect") {
+            await store.claimForm(
+              p,
+              await hash(body.csrf),
+              csrf.expires,
+              now(),
+            );
+            const result = await ctx.link.begin(ctx.p);
+            const route = await vault.seal(
+              {
+                id: ctx.id,
+                expires: now() + 600000,
+                cookie: await hash(result.cookie),
+              },
+              aad(p, "app-route"),
+            );
+            return new Response(null, {
+              status: 303,
+              headers: {
+                ...headers,
+                Location: result.url,
+                "Set-Cookie": cookie(result.cookie + "~" + route),
+              },
+            });
+          }
+          assert(
+            typeof body.grant_id === "string" && typeof body.epoch === "string",
+          );
+          if (url.pathname === "/api/apps/refresh") {
+            await ctx.link.access(ctx.p, body.grant_id, true);
+            return response({ refreshed: true });
+          }
+          if (url.pathname === "/api/apps/disconnect") {
+            await store.disconnect(ctx.p, body.grant_id, body.epoch);
+            return response({ disconnected: true });
+          }
+          return response({ error: "not_found" }, 404);
+        }
         if (["/api/docx/search", "/api/docx/fetch"].includes(url.pathname)) {
           assert(docxEnabled(env), "not_found", 404);
           assert(request.method === "POST", "method_not_allowed", 405);
@@ -357,19 +424,12 @@ export function createWorker(
           assert(configured(env), "configuration_required", 503);
           const args = await requestJSON(request);
           await store.rate(await hash(aad(p, "agenda-rate")), now(), 60);
-          const reader = new DocxCandidate(
-            new DocxCandidateProvider(
-              deps.fetcher ?? globalThis.fetch.bind(globalThis),
-            ),
-            createDocxD1Access(store, link),
-            vault,
-            now,
-            "feishu_api",
-          );
           return response(
-            url.pathname.endsWith("/search")
-              ? await reader.search(p, args)
-              : await reader.fetch(p, args),
+            await apps.read(
+              p,
+              url.pathname.endsWith("/search") ? "search_docx" : "fetch_docx",
+              args,
+            ),
           );
         }
         if (url.pathname === "/api/agenda") {
@@ -379,9 +439,7 @@ export function createWorker(
           assert(configured(env), "configuration_required", 503);
           const args = await requestJSON(request);
           await store.rate(await hash(aad(p, "agenda-rate")), now(), 60);
-          return response(
-            await new Agenda(store, link, api, vault, now).read(p, args),
-          );
+          return response(await apps.read(p, "get_agenda", args));
         }
         if (url.pathname === "/api/demo/agenda") {
           assert(synthetic, "not_found", 404);
@@ -441,10 +499,28 @@ export function createWorker(
               "invalid_callback",
             );
           assert(!url.searchParams.has("error"), "authorization_denied");
-          await link.callback(
-            p,
+          const parts = browserCookie(request).split("~");
+          assert(parts.length === 1 || parts.length === 2, "invalid_callback");
+          let callbackLink = link,
+            callbackPrincipal = p;
+          if (parts[1]) {
+            const route = await vault.open<{
+              id: string;
+              expires: number;
+              cookie: string;
+            }>(parts[1], aad(p, "app-route"));
+            assert(
+              route.expires > now() && route.cookie === (await hash(parts[0]!)),
+              "invalid_callback",
+            );
+            const ctx = await apps.context(p, route.id);
+            callbackLink = ctx.link;
+            callbackPrincipal = ctx.p;
+          }
+          await callbackLink.callback(
+            callbackPrincipal,
             url.searchParams.get("state") ?? "",
-            browserCookie(request),
+            parts[0]!,
             url.searchParams.get("code") ?? "",
           );
           return new Response(null, {
@@ -455,6 +531,7 @@ export function createWorker(
         if (
           [
             "/api/feishu/connect",
+            "/api/feishu/connect-documents",
             "/api/feishu/disconnect",
             "/api/feishu/refresh",
           ].includes(url.pathname)
@@ -462,7 +539,12 @@ export function createWorker(
           assert(request.method === "POST", "method_not_allowed", 405);
           assert(configured(env), "configuration_required", 503);
           sameOrigin(request, env);
-          const connecting = url.pathname === "/api/feishu/connect";
+          const connecting = [
+            "/api/feishu/connect",
+            "/api/feishu/connect-documents",
+          ].includes(url.pathname);
+          const documents = url.pathname === "/api/feishu/connect-documents";
+          if (documents) assert(docxEnabled(env), "not_found", 404);
           const body = connecting
             ? await connectionForm(request)
             : await requestJSON(request);
@@ -492,7 +574,7 @@ export function createWorker(
                 ...configurationChecks(env),
               }),
             );
-            const result = await link.begin(p);
+            const result = await link.begin(p, documents);
             return new Response(null, {
               status: 303,
               headers: {

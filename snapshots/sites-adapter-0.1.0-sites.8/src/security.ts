@@ -19,6 +19,7 @@ export interface Env {
   FEISHU_READ_ENABLED?: string;
   FEISHU_DATA_MODE?: string;
   FEISHU_DOCX_ENABLED?: string;
+  FEISHU_OAUTH_SCOPES?: readonly string[];
 }
 export interface Principal {
   site: string;

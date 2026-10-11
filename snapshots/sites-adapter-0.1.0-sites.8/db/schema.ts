@@ -22,6 +22,7 @@ export const connections = sqliteTable(
     grant: text("grant_id").notNull(),
     tenant: text("tenant_key").notNull(),
     openId: text("open_id").notNull(),
+    unionId: text("union_id"),
     display: text("display_name").notNull(),
     credentials: text("credentials"),
     scopes: text("scopes").notNull(),
@@ -70,4 +71,16 @@ export const syntheticState = sqliteTable(
     fixture: text("fixture_id").notNull(),
   },
   (t) => [primaryKey({ columns: [t.site, t.user] })],
+);
+export const appRegistry = sqliteTable(
+  "app_registry",
+  {
+    site: text("site").notNull(),
+    owner: text("owner").notNull(),
+    appId: text("app_id").notNull(),
+    label: text("label").notNull(),
+    secret: text("secret").notNull(),
+    scopes: text("scopes").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.site, t.owner, t.appId] })],
 );

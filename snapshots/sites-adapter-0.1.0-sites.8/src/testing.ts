@@ -9,3 +9,5 @@ export * from "./oauth-wire.ts";
 export { createWorker, TOOL } from "./worker.ts";
 export * from "./docx-candidate.ts";
 export * from "./docx-d1-access.ts";
+
+export * from "./apps.ts";

@@ -171,14 +171,17 @@ export async function setup() {
   const send = (path, options) => worker.fetch(request(path, options), env);
   const status = async (user = P.user) =>
     (await send("/api/status", { user })).json();
-  async function begin(user = P.user) {
+  async function begin(user = P.user, documents = false) {
     const current = await status(user);
-    const r = await send("/api/feishu/connect", {
-      method: "POST",
-      user,
-      form: { csrf: current.csrf },
-      headers: { Origin: P.site },
-    });
+    const r = await send(
+      documents ? "/api/feishu/connect-documents" : "/api/feishu/connect",
+      {
+        method: "POST",
+        user,
+        form: { csrf: current.csrf },
+        headers: { Origin: P.site },
+      },
+    );
     assert.equal(r.status, 303, await r.clone().text());
     return {
       response: r,

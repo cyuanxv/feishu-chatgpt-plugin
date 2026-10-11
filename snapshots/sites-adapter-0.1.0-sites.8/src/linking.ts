@@ -10,7 +10,13 @@ import {
   type Principal,
 } from "./security.ts";
 import { Store, type Grant } from "./store.ts";
-import { Feishu, SCOPES, requestedScopes, type Tokens } from "./feishu.ts";
+import {
+  Feishu,
+  SCOPES,
+  requestedScopes,
+  minimumScopes,
+  type Tokens,
+} from "./feishu.ts";
 import { AUTHORIZE_ENDPOINT, checkAuthorizationWire } from "./oauth-wire.ts";
 export class Linking {
   constructor(
@@ -20,8 +26,11 @@ export class Linking {
     readonly api: Feishu,
     private now = Date.now,
   ) {}
-  async begin(p: Principal) {
-    const scope = requestedScopes(this.env).join(" ");
+  async begin(p: Principal, documents = false) {
+    const scope = (
+      this.env.FEISHU_OAUTH_SCOPES ??
+      (documents ? requestedScopes(this.env) : SCOPES)
+    ).join(" ");
     const state = random(),
       cookie = random(),
       verifier = random();
@@ -124,6 +133,7 @@ export class Linking {
         grant_id: grantId,
         tenant_key: profile.tenant_key,
         open_id: profile.open_id,
+        union_id: profile.union_id ?? null,
         display_name: profile.name ?? "飞书账户",
         credentials: await this.vault.seal(
           tokens,
@@ -150,7 +160,8 @@ export class Linking {
       throw new AppError("provider_scope_changed", 401);
     }
     assert(
-      Array.isArray(scopes) && SCOPES.every((s) => scopes.includes(s)),
+      Array.isArray(scopes) &&
+        minimumScopes(this.env).every((s) => scopes.includes(s)),
       "provider_scope_changed",
       401,
     );
@@ -166,7 +177,7 @@ export class Linking {
       row = await this.store.lease(p, row, this.now());
       try {
         tokens = await this.api.token(
-          { grant_type: "refresh_token", refresh_token: tokens.refresh_token },
+          { grant_type: "refresh_token", refresh_token: tokens.refresh_token, scope: (scopes as string[]).join(" ") },
           scopes as string[],
         );
         row = await this.store.rotate(

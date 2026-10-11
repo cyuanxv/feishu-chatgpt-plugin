@@ -11,6 +11,7 @@ async function browser(s, respond = () => null) {
     "connect",
     "connect-form",
     "connect-csrf",
+    "connect-documents",
     "disconnect",
     "demo",
     "demo-result",
@@ -21,12 +22,13 @@ async function browser(s, respond = () => null) {
     "doc-results",
     "doc-content",
     "doc-more",
-    "doc-next",
+    "doc-next", "apps", "app-list", "app-add", "app-id", "app-label", "app-secret", "app-message",
   ];
   const nodes = Object.fromEntries(
     ids.map((id) => [
       "#" + id,
       {
+        replaceChildren() {}, append() {},
         textContent: "",
         hidden: false,
         disabled: false,
@@ -34,7 +36,7 @@ async function browser(s, respond = () => null) {
         addEventListener(event, handler) {
           assert.equal(
             event,
-            ["connect-form", "doc-search"].includes(id) ? "submit" : "click",
+            ["connect-form", "doc-search", "app-add"].includes(id) ? "submit" : "click",
           );
           this.listeners.push(handler);
         },
@@ -48,6 +50,7 @@ async function browser(s, respond = () => null) {
   const submissions = [];
   const context = {
     document: {
+      createElement() { return {append(){},addEventListener(){}}; },
       querySelector(selector) {
         assert(nodes[selector]);
         return nodes[selector];
@@ -148,7 +151,7 @@ test("served ui.js connects with only the connect handler", async () => {
   const s = await setup();
   const b = await browser(s);
   await b.click("connect");
-  assert.deepEqual(b.paths, ["/api/status", "/api/feishu/connect"]);
+  assert.deepEqual(b.paths, ["/api/status", "/api/apps", "/api/feishu/connect"]);
   assert.equal(b.redirects.length, 1);
   assert.equal(new URL(b.redirects[0]).origin, "https://accounts.feishu.cn");
   assert.equal(s.mocked.calls.length, 0);
@@ -246,8 +249,10 @@ test("served ui.js disconnect button removes only the current grant", async () =
   await b.click("disconnect");
   assert.deepEqual(b.paths, [
     "/api/status",
+    "/api/apps",
     "/api/feishu/disconnect",
     "/api/status",
+    "/api/apps",
   ]);
   assert.equal(await s.store.get(P), null);
   assert.equal(b.redirects.length, 0);
