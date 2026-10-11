@@ -1,7 +1,11 @@
 import "./runtime.ts";
+import {Writes} from "./writes.ts";
+import {WRITE_TOOLS,WRITE_SCHEMAS} from "./write-contracts.ts";
+import {writeReviewPage,writeReviewStyle,writeReviewScript} from "./write-ui.ts";
 import {queryPage,queryScript,queryStyle} from "./query-ui.ts";
 import {
   AppError,
+  random,
   boundedText,
   assert,
   principal,
@@ -20,6 +24,7 @@ import {
   safeError,
   type Env,
 } from "./security.ts";
+import { SUGGEST_TOOL } from "./extended-reads.ts";
 import { READ_TOOL } from "./readonly.ts";
 import { Apps } from "./apps.ts";
 import { Store } from "./store.ts";
@@ -259,7 +264,8 @@ export function createWorker(
                         },
                       }
                     : TOOL,
-                  ...(docxEnabled(env) ? [...DOCX_TOOLS, READ_TOOL] : []),
+                  ...(docxEnabled(env) ? [...DOCX_TOOLS, READ_TOOL, SUGGEST_TOOL] : []),
+                  ...(!synthetic && env.FEISHU_WRITE_ENABLED==='true'?WRITE_TOOLS:[]),
                 ],
               },
             });
@@ -282,9 +288,9 @@ export function createWorker(
                   !Array.isArray(body.params._meta),
               );
             assert(
-              body.params.name === "get_agenda" ||
+              (env.FEISHU_WRITE_ENABLED==='true' && !synthetic && Object.hasOwn(WRITE_SCHEMAS,String(body.params.name))) || body.params.name === "get_agenda" ||
                 (docxEnabled(env) &&
-                  ["search_docx", "fetch_docx", "query_feishu"].includes(
+                  ["search_docx", "fetch_docx", "query_feishu", "suggest_meeting_times"].includes(
                     String(body.params.name),
                   )),
               "write_or_unknown_tool_denied",
@@ -292,7 +298,9 @@ export function createWorker(
             );
             assert(synthetic || configured(env), "configuration_required", 503);
             await store.rate(await hash(aad(p, "agenda-rate")), now(), 60);
-            const result = synthetic
+            const result = env.FEISHU_WRITE_ENABLED==='true' && Object.hasOwn(WRITE_SCHEMAS,String(body.params.name))
+              ? await new Writes(env,deps.fetcher,now).prepare(p,String(body.params.name),body.params.arguments??{})
+              : synthetic
               ? await syntheticAgenda(env.DB, p, body.params.arguments ?? {})
               : await apps.read(
                   p,
@@ -342,6 +350,19 @@ export function createWorker(
           }
         }
         const p = principal(request, env);
+        if(url.pathname.startsWith('/write-review/')||['/write-review.js','/write-review.css'].includes(url.pathname)){
+          assert(env.FEISHU_WRITE_ENABLED==='true'&&!synthetic,'not_found',404);assert(request.method==='GET','method_not_allowed',405);
+          if(url.pathname.startsWith('/write-review/')){await new Writes(env,deps.fetcher,now).review(p,url.pathname.split('/').pop()!);return new Response(writeReviewPage,{headers:{...headers,'Content-Type':'text/html; charset=utf-8','Set-Cookie':`__Host-feishu-write=${random()}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=900`}});}
+          return new Response(url.pathname.endsWith('.js')?writeReviewScript:writeReviewStyle,{headers:{...headers,'Content-Type':url.pathname.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8'}});
+        }
+        if(url.pathname.startsWith('/api/writes/')){
+          assert(env.FEISHU_WRITE_ENABLED==='true'&&!synthetic&&configured(env),'not_found',404);const id=url.pathname.split('/').pop()!,writes=new Writes(env,deps.fetcher,now);
+          const cookies=(request.headers.get('cookie')??'').split(';').map(v=>v.trim()).filter(v=>v.startsWith('__Host-feishu-write='));assert(cookies.length===1,'browser_confirmation_required',403);const binding=await hash(cookies[0]!);assert(['GET','POST'].includes(request.method),'method_not_allowed',405);
+          if(request.method==='GET'){browserOrigin(request,env);const result=await writes.review(p,id);const csrf=await vault.seal({id,binding,expires:now()+600000},aad(p,'write-confirmation'));return response({...result,csrf});}
+          sameOrigin(request,env);const body=await requestJSON(request);object(body,['action','csrf']);assert(typeof body.csrf==='string'&&['confirm','cancel'].includes(String(body.action)));
+          const proof=await vault.open<{id:string;binding:string;expires:number}>(body.csrf,aad(p,'write-confirmation'));assert(proof.id===id&&proof.binding===binding&&proof.expires>now()&&proof.expires<=now()+600000,'confirmation_invalid',403);
+          await store.rate(await hash(aad(p,'write-rate')),now(),10);return response(body.action==='confirm'?await writes.execute(p,id):await writes.cancel(p,id));
+        }
         if (url.pathname.startsWith("/api/apps")) {
           assert(!synthetic && configured(env), "configuration_required", 503);
           if (url.pathname === "/api/apps" && request.method === "GET")

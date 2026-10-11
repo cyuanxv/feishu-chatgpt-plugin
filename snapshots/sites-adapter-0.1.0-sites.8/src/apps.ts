@@ -1,4 +1,7 @@
 import { z } from "zod";
+import {WRITE_SCOPES} from "./write-contracts.ts";
+import {meetingSlots} from "./meeting-slots.ts";
+import {timeRange} from "./extended-reads.ts";
 import {
   assert,
   aad,
@@ -17,7 +20,7 @@ import { DocxCandidate, DocxCandidateProvider } from "./docx-candidate.ts";
 import { createDocxD1Access } from "./docx-d1-access.ts";
 const appIdSchema = z.string().regex(/^cli_[a-zA-Z0-9]{8,64}$/);
 import {READ_SCOPES, READ_REQUIREMENTS, ReadonlyAPI, ReadFailure, readInput} from './readonly.ts';
-const capabilities = [...SCOPES, ...DOCX_SCOPES, ...READ_SCOPES];
+const readCapabilities = [...SCOPES, ...DOCX_SCOPES, ...READ_SCOPES];
 interface AppRow {
   app_id: string;
   label: string;
@@ -35,6 +38,7 @@ export class Apps {
     this.store = new Store(env.DB);
     this.vault = new Vault(env.APP_ENCRYPTION_KEY);
   }
+  private capabilities(){return [...new Set([...readCapabilities,...(this.env.FEISHU_WRITE_ENABLED==='true'?WRITE_SCOPES:[])])];}
   private async provider(path: string, init: RequestInit) {
     const r = await this.transport("https://open.feishu.cn" + path, {
       ...init,
@@ -138,7 +142,7 @@ export class Apps {
       saved: true,
       app_id: input.app_id,
       permission_count: scopes.length,
-      available_scopes: capabilities.filter((s) => scopes.includes(s)),
+      available_scopes: this.capabilities().filter((s) => scopes.includes(s)),
       permission_source: "feishu_application_scopes_api",
     };
   }
@@ -154,7 +158,7 @@ export class Apps {
         aad(p, "app-secret", id),
       );
       const available = JSON.parse(row.scopes) as string[];
-      const scopes = capabilities.filter((s) => available.includes(s));
+      const scopes = this.capabilities().filter((s) => available.includes(s));
       assert(
         scopes.includes("offline_access"),
         "app_offline_scope_required",
@@ -215,7 +219,7 @@ export class Apps {
       if(row?.status==='active')active.push({ctx,row});
     }
     if(!connection_id&&active.length>1)assert(active.every(v=>v.row.union_id&&v.row.union_id===active[0]!.row.union_id&&v.row.tenant_key===active[0]!.row.tenant_key),'account_selection_required',409);
-    const matching=active.filter(v=>(!connection_id||v.ctx.id===connection_id)&&required.some(s=>JSON.parse(v.row.scopes).includes(s)));
+    const matching=active.filter(v=>(!connection_id||v.ctx.id===connection_id)&&(!required.length||required.some(s=>JSON.parse(v.row.scopes).includes(s))));
     if(!matching.length)return {error:active.length?'insufficient_scope':'connection_required',operation:input.operation,required_scopes_any:required,connections:(await this.list(p)).map(c=>({connection_id:c.connection_id,label:c.label,connected:c.connected,can_authorize:c.available_scopes.some((s:string)=>required.includes(s))})),hint:'在连接管理中授权已有权限的应用后重试。'};
     const attempts=[];
     for(const {ctx,row} of matching){
@@ -224,7 +228,15 @@ export class Apps {
     }
     return {error:'resource_access_denied',operation:input.operation,required_scopes_any:required,attempts,hint:'应用具备接口权限，但当前用户或应用无该资源访问权。'};
   }
+  async suggest(p:Principal,args:unknown){
+    const parsed=z.object({connection_id:z.string().max(80).optional(),people:z.array(z.string().regex(/^ou_[A-Za-z0-9_-]+$/)).min(1).max(20),time_range:timeRange,duration_minutes:z.number().int().min(5).max(480).default(30),step_minutes:z.number().int().min(5).max(120).default(15)}).strict().safeParse(args);assert(parsed.success);const a=parsed.data;
+    assert(new Set(a.people).size===a.people.length);
+    let connection_id=a.connection_id;const people=[];
+    for(const user_id of a.people){const result:any=await this.query(p,{...(connection_id?{connection_id}:{}),operation:'freebusy',parameters:{user_id,time_range:a.time_range}});if(result.error)return {...result,availability_complete:false,slots:[]};connection_id=result.connection_id;people.push({user_id,busy:result.data.freebusy_list});}
+    return {...meetingSlots(a.time_range.start,a.time_range.end,a.duration_minutes,a.step_minutes,people),connection_id,source:'feishu_api',availability_complete:true};
+  }
   async read(p: Principal, name: string, args: unknown) {
+    if(name === "suggest_meeting_times") return this.suggest(p,args);
     if(name === "query_feishu") return this.query(p,args);
     assert(args && typeof args === "object" && !Array.isArray(args));
     const { connection_id, ...input } = args as Record<string, unknown>;
