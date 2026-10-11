@@ -1,9 +1,9 @@
 {
   "name": "feishu-sites-agenda",
-  "version": "0.1.0-sites.21",
+  "version": "0.1.0-sites.22",
   "private": true,
   "type": "module",
-  "description": "Private Sites single-agenda Feishu connector candidate",
+  "description": "Private Feishu multi-app tools with reviewed writes and meeting room booking",
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -16,13 +16,14 @@
     "check:form-http": "node scripts/check-form-http.mjs"
   },
   "devDependencies": {
+    "@larksuiteoapi/node-sdk": "1.74.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@types/node": "26.6.4",
     "drizzle-kit": "0.31.11",
     "drizzle-orm": "0.45.3",
     "esbuild": "0.28.2",
     "prettier": "3.9.9",
-    "typescript": "7.0.2",
-    "@types/node": "26.6.4",
-    "@modelcontextprotocol/sdk": "1.32.1"
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "zod": "4.6.5"

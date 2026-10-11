@@ -1,7 +1,7 @@
 import { z } from "zod";
-import {WRITE_SCOPES} from "./write-contracts.ts";
-import {meetingSlots} from "./meeting-slots.ts";
-import {timeRange} from "./extended-reads.ts";
+import { WRITE_SCOPES } from "./write-contracts.ts";
+import { meetingSlots } from "./meeting-slots.ts";
+import { timeRange } from "./extended-reads.ts";
 import {
   assert,
   aad,
@@ -19,7 +19,13 @@ import { Agenda } from "./agenda.ts";
 import { DocxCandidate, DocxCandidateProvider } from "./docx-candidate.ts";
 import { createDocxD1Access } from "./docx-d1-access.ts";
 const appIdSchema = z.string().regex(/^cli_[a-zA-Z0-9]{8,64}$/);
-import {READ_SCOPES, READ_REQUIREMENTS, ReadonlyAPI, ReadFailure, readInput} from './readonly.ts';
+import {
+  READ_SCOPES,
+  READ_REQUIREMENTS,
+  ReadonlyAPI,
+  ReadFailure,
+  readInput,
+} from "./readonly.ts";
 const readCapabilities = [...SCOPES, ...DOCX_SCOPES, ...READ_SCOPES];
 interface AppRow {
   app_id: string;
@@ -38,7 +44,14 @@ export class Apps {
     this.store = new Store(env.DB);
     this.vault = new Vault(env.APP_ENCRYPTION_KEY);
   }
-  private capabilities(){return [...new Set([...readCapabilities,...(this.env.FEISHU_WRITE_ENABLED==='true'?WRITE_SCOPES:[])])];}
+  private capabilities() {
+    return [
+      ...new Set([
+        ...readCapabilities,
+        ...(this.env.FEISHU_WRITE_ENABLED === "true" ? WRITE_SCOPES : []),
+      ]),
+    ];
+  }
   private async provider(path: string, init: RequestInit) {
     const r = await this.transport("https://open.feishu.cn" + path, {
       ...init,
@@ -208,44 +221,165 @@ export class Apps {
     return output;
   }
   async query(p: Principal, args: unknown) {
-    assert(args && typeof args==='object' && !Array.isArray(args));
-    const {connection_id,...rest}=args as Record<string,unknown>;
-    assert(connection_id===undefined || typeof connection_id==='string');
-    const input=readInput(rest), required=READ_REQUIREMENTS[input.operation]!;
-    if(input.cursor) assert(connection_id,'connection_reference_required');
-    const rows=await this.rows(p); const active: {ctx: Awaited<ReturnType<Apps['context']>>; row: Grant}[]=[];
-    for(const id of ['primary',...rows.map(r=>r.app_id)]){
-      const ctx=await this.context(p,id), row=await this.store.get(ctx.p);
-      if(row?.status==='active')active.push({ctx,row});
+    assert(args && typeof args === "object" && !Array.isArray(args));
+    const { connection_id, ...rest } = args as Record<string, unknown>;
+    assert(connection_id === undefined || typeof connection_id === "string");
+    const input = readInput(rest),
+      required = READ_REQUIREMENTS[input.operation]!;
+    if (input.cursor) assert(connection_id, "connection_reference_required");
+    const rows = await this.rows(p);
+    const active: { ctx: Awaited<ReturnType<Apps["context"]>>; row: Grant }[] =
+      [];
+    for (const id of ["primary", ...rows.map((r) => r.app_id)]) {
+      const ctx = await this.context(p, id),
+        row = await this.store.get(ctx.p);
+      if (row?.status === "active") active.push({ ctx, row });
     }
-    if(!connection_id&&active.length>1)assert(active.every(v=>v.row.union_id&&v.row.union_id===active[0]!.row.union_id&&v.row.tenant_key===active[0]!.row.tenant_key),'account_selection_required',409);
-    const matching=active.filter(v=>(!connection_id||v.ctx.id===connection_id)&&(!required.length||required.some(s=>JSON.parse(v.row.scopes).includes(s))));
-    if(!matching.length)return {error:active.length?'insufficient_scope':'connection_required',operation:input.operation,required_scopes_any:required,connections:(await this.list(p)).map(c=>({connection_id:c.connection_id,label:c.label,connected:c.connected,can_authorize:c.available_scopes.some((s:string)=>required.includes(s))})),hint:'在连接管理中授权已有权限的应用后重试。'};
-    const attempts=[];
-    for(const {ctx,row} of matching){
-      try{const access=await ctx.link.access(ctx.p,row.grant_id);const result=await new ReadonlyAPI(this.transport,this.vault,this.now).run(ctx.p,row.grant_id,access.token,input);return {...result,connection_id:ctx.id};}
-      catch(e){if(e instanceof ReadFailure&&e.status===403){attempts.push({connection_id:ctx.id,provider_code:e.provider_code});if(!connection_id&&!input.cursor)continue;}throw e;}
+    if (!connection_id && active.length > 1)
+      assert(
+        active.every(
+          (v) =>
+            v.row.union_id &&
+            v.row.union_id === active[0]!.row.union_id &&
+            v.row.tenant_key === active[0]!.row.tenant_key,
+        ),
+        "account_selection_required",
+        409,
+      );
+    const matching = active.filter(
+      (v) =>
+        (!connection_id || v.ctx.id === connection_id) &&
+        (!required.length ||
+          required.some((s) => JSON.parse(v.row.scopes).includes(s))),
+    );
+    if (!matching.length)
+      return {
+        error: active.length ? "insufficient_scope" : "connection_required",
+        operation: input.operation,
+        required_scopes_any: required,
+        connections: (await this.list(p)).map((c) => ({
+          connection_id: c.connection_id,
+          label: c.label,
+          connected: c.connected,
+          can_authorize: c.available_scopes.some((s: string) =>
+            required.includes(s),
+          ),
+        })),
+        hint: "在连接管理中授权已有权限的应用后重试。",
+      };
+    const attempts = [];
+    for (const { ctx, row } of matching) {
+      try {
+        const access = await ctx.link.access(ctx.p, row.grant_id);
+        const result = await new ReadonlyAPI(
+          this.transport,
+          this.vault,
+          this.now,
+        ).run(ctx.p, row.grant_id, access.token, input);
+        await this.store.current(ctx.p, row.grant_id);
+        if (input.operation === "profile")
+          assert(
+            result.data.tenant_key === row.tenant_key &&
+              result.data.open_id === row.open_id,
+            "profile_identity_mismatch",
+            403,
+          );
+        return { ...result, connection_id: ctx.id };
+      } catch (e) {
+        if (e instanceof ReadFailure && e.status === 403) {
+          attempts.push({
+            connection_id: ctx.id,
+            provider_code: e.provider_code,
+          });
+          if (!connection_id && !input.cursor) continue;
+        }
+        throw e;
+      }
     }
-    return {error:'resource_access_denied',operation:input.operation,required_scopes_any:required,attempts,hint:'应用具备接口权限，但当前用户或应用无该资源访问权。'};
+    return {
+      error: "resource_access_denied",
+      operation: input.operation,
+      required_scopes_any: required,
+      attempts,
+      hint: "应用具备接口权限，但当前用户或应用无该资源访问权。",
+    };
   }
-  async suggest(p:Principal,args:unknown){
-    const parsed=z.object({connection_id:z.string().max(80).optional(),people:z.array(z.string().regex(/^ou_[A-Za-z0-9_-]+$/)).min(1).max(20),time_range:timeRange,duration_minutes:z.number().int().min(5).max(480).default(30),step_minutes:z.number().int().min(5).max(120).default(15)}).strict().safeParse(args);assert(parsed.success);const a=parsed.data;
-    assert(new Set(a.people).size===a.people.length);
-    let connection_id=a.connection_id;const people=[];
-    for(const user_id of a.people){const result:any=await this.query(p,{...(connection_id?{connection_id}:{}),operation:'freebusy',parameters:{user_id,time_range:a.time_range}});if(result.error)return {...result,availability_complete:false,slots:[]};connection_id=result.connection_id;people.push({user_id,busy:result.data.freebusy_list});}
-    return {...meetingSlots(a.time_range.start,a.time_range.end,a.duration_minutes,a.step_minutes,people),connection_id,source:'feishu_api',availability_complete:true};
+  async suggest(p: Principal, args: unknown) {
+    const parsed = z
+      .object({
+        connection_id: z.string().max(80).optional(),
+        people: z
+          .array(z.string().regex(/^ou_[A-Za-z0-9_-]+$/))
+          .min(1)
+          .max(20),
+        time_range: timeRange,
+        timezone: z.string().max(80).default("UTC"),
+        limit: z.number().int().min(2).max(5).default(3),
+        duration_minutes: z.number().int().min(5).max(480).default(30),
+        step_minutes: z.number().int().min(5).max(120).default(15),
+      })
+      .strict()
+      .safeParse(args);
+    assert(parsed.success);
+    const a = parsed.data;
+    assert(new Set(a.people).size === a.people.length);
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: a.timezone });
+    } catch {
+      assert(false, "invalid_timezone");
+    }
+    let connection_id = a.connection_id;
+    const people = [];
+    for (const user_id of a.people) {
+      const result: any = await this.query(p, {
+        ...(connection_id ? { connection_id } : {}),
+        operation: "freebusy",
+        parameters: { user_id, time_range: a.time_range },
+      });
+      if (result.error)
+        return { ...result, availability_complete: false, slots: [] };
+      connection_id = result.connection_id;
+      people.push({ user_id, busy: result.data.freebusy_list });
+    }
+    return {
+      ...meetingSlots(
+        a.time_range.start,
+        a.time_range.end,
+        a.duration_minutes,
+        a.step_minutes,
+        people,
+        a.limit,
+      ),
+      timezone: a.timezone,
+      connection_id,
+      source: "feishu_api",
+      availability_complete: true,
+    };
   }
   async read(p: Principal, name: string, args: unknown) {
-    if(name === "suggest_meeting_times") return this.suggest(p,args);
-    if(name === "query_feishu") return this.query(p,args);
+    if (name === "suggest_meeting_times") return this.suggest(p, args);
+    if (name === "query_feishu") return this.query(p, args);
     assert(args && typeof args === "object" && !Array.isArray(args));
     const { connection_id, ...input } = args as Record<string, unknown>;
     if (connection_id !== undefined) assert(typeof connection_id === "string");
     const rows = await this.rows(p);
-    if(!rows.length && connection_id===undefined){
-      const ctx=await this.context(p);
-      const docs=new DocxCandidate(new DocxCandidateProvider(this.transport),createDocxD1Access(this.store,ctx.link),this.vault,this.now,'feishu_api');
-      return name==='get_agenda'?new Agenda(this.store,ctx.link,ctx.api,this.vault,this.now).read(p,input):name==='search_docx'?docs.search(p,input):docs.fetch(p,input);
+    if (!rows.length && connection_id === undefined) {
+      const ctx = await this.context(p);
+      const docs = new DocxCandidate(
+        new DocxCandidateProvider(this.transport),
+        createDocxD1Access(this.store, ctx.link),
+        this.vault,
+        this.now,
+        "feishu_api",
+      );
+      return name === "get_agenda"
+        ? new Agenda(this.store, ctx.link, ctx.api, this.vault, this.now).read(
+            p,
+            input,
+          )
+        : name === "search_docx"
+          ? docs.search(p, input)
+          : docs.fetch(p, input);
     }
     // Preserve the legacy contract when no additional apps exist.
     if (rows.length && (input.cursor || input.result_id))

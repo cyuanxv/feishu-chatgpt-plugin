@@ -4,7 +4,7 @@ import { readFile, readdir, mkdtemp, rm, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { Store, random, SCOPES } from "../.test-build/module.mjs";
+import { Store, random, SCOPES, WRITE_SCOPES } from "../.test-build/module.mjs";
 import { mock, ARGS, P } from "../test/helpers.mjs";
 const { Miniflare } = createRequire(import.meta.url)(
   process.env.MINIFLARE_MODULE ?? "../runtime-check/node_modules/miniflare",
@@ -12,6 +12,7 @@ const { Miniflare } = createRequire(import.meta.url)(
 await mkdir(".runtime-test", { recursive: true });
 const persistence = await mkdtemp(resolve(".runtime-test/d1-"));
 const provider = mock();
+let writeCalls=0;
 const bindings = {
   APP_ORIGIN: P.site,
   APP_ENCRYPTION_KEY: random(),
@@ -31,7 +32,7 @@ const options = () => ({
   d1Persist: persistence,
   bindings,
   outboundService: async (req) =>
-    provider.fetcher(req.url, {
+    req.url==='https://open.feishu.cn/open-apis/task/v2/tasks?user_id_type=open_id'?(writeCalls++,Response.json({code:0,data:{task:{guid:'synthetic-task'}}})):provider.fetcher(req.url, {
       method: req.method,
       headers: {
         Authorization: req.headers.get("authorization"),
@@ -273,6 +274,16 @@ try {
   ok(
     "actual Worker rejects OAuth error envelopes even when token fields exist",
   );
+  delete provider.hooks.token;
+  await mf.dispose();bindings.FEISHU_WRITE_ENABLED='true';mf=new Miniflare(options());db=await mf.getD1Database('DB');await grant();
+  await db.prepare('UPDATE connections SET scopes=? WHERE site=? AND user_id=?').bind(JSON.stringify([...SCOPES,...WRITE_SCOPES]),P.site,P.user).run();
+  const prepared=await (await request('/mcp',{method:'POST',body:{jsonrpc:'2.0',id:10,method:'tools/call',params:{name:'create_task',arguments:{request_id:crypto.randomUUID(),parameters:{summary:'Synthetic runtime acceptance'}}}}})).json();
+  assert.equal(prepared.result.structuredContent.status,'pending');const intent=prepared.result.structuredContent.intent_id;assert.equal(writeCalls,0);
+  const review=await request('/write-review/'+intent);const reviewCookie=review.headers.get('set-cookie').split(';')[0];const preview=await (await request('/api/writes/'+intent,{headers:{Cookie:reviewCookie}})).json();
+  const confirms=await Promise.all(Array.from({length:8},()=>request('/api/writes/'+intent,{method:'POST',body:{action:'confirm',csrf:preview.csrf},headers:{Cookie:reviewCookie}})));
+  assert(confirms.every(r=>r.status===200));assert.equal(writeCalls,1);const receipt=await (await request('/api/writes/'+intent,{headers:{Cookie:reviewCookie}})).json();assert.equal(receipt.status,'succeeded');
+  await mf.dispose();mf=new Miniflare(options());db=await mf.getD1Database('DB');const afterRestart=await (await request('/api/writes/'+intent,{method:'POST',body:{action:'confirm',csrf:preview.csrf},headers:{Cookie:reviewCookie}})).json();assert.equal(afterRestart.status,'succeeded');assert.equal(writeCalls,1);
+  ok('actual workerd D1 serializes 8 write confirmations and retains receipt across restart');
   // Deployment-authorized mode is independently exercised without any secrets.
   await mf.dispose();
   mf = new Miniflare({

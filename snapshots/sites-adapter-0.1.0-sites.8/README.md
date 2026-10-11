@@ -1,3 +1,5 @@
+> 完整规划候选（2026-10-11）：本分支新增 30 项原规划工具的云端路由和会议室预订。新增写入默认关闭，尚未做真实飞书写入；见 [逐项进度与验收边界](docs/FULL-PLAN-PROGRESS.md)。
+
 # Feishu Sites adapter: 0.1.0-sites.13
 
 Cloud-hosted, owner-private calendar reader. The historical snapshot directory is retained for compatibility. This adapter runs in Sites / Cloudflare Workers with D1; it needs no local stdio process, tunnel, or running personal computer.
