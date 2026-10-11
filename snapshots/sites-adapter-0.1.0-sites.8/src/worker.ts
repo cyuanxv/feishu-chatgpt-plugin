@@ -1,5 +1,5 @@
 import "./runtime.ts";
-import {queryPage,queryScript} from "./query-ui.ts";
+import {queryPage,queryScript,queryStyle} from "./query-ui.ts";
 import {
   AppError,
   boundedText,
@@ -148,7 +148,7 @@ export function createWorker(
     async fetch(request: Request, env: Env): Promise<Response> {
       try {
         const url = new URL(request.url);
-        if(['/query','/query.js'].includes(url.pathname)) {principal(request,env);assert(docxEnabled(env),'not_found',404);assert(request.method==='GET','method_not_allowed',405);return new Response(url.pathname==='/query'?queryPage:queryScript,{headers:{...headers,'Content-Type':url.pathname==='/query'?'text/html; charset=utf-8':'text/javascript; charset=utf-8'}}); }
+        if(['/query','/query.js','/query.css'].includes(url.pathname)) {principal(request,env);assert(docxEnabled(env),'not_found',404);assert(request.method==='GET','method_not_allowed',405);return new Response(url.pathname==='/query'?queryPage:url.pathname==='/query.css'?queryStyle:queryScript,{headers:{...headers,'Content-Type':url.pathname==='/query'?'text/html; charset=utf-8':url.pathname==='/query.css'?'text/css; charset=utf-8':'text/javascript; charset=utf-8'}}); }
         const synthetic = dataMode(env) === "synthetic";
         assert(url.origin === origin(env), "invalid_origin", 403);
         assert(
