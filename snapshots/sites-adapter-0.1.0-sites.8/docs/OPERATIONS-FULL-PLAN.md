@@ -35,3 +35,7 @@ CI 对快照运行离线回归；干净新租户部署、外部模型评测、�
 退出码 0：health 返回真实模式且匿名 /api/apps 被拒绝；1：网络、响应契约或匿名保护失败；2：私有站点的外层认证阻止 health 验证，需要认证环境内另行检查，不能标记健康。输出仅固定原因、HTTP 状态和时间，不打印 URL、响应正文、跳转地址或凭据。成功不代表飞书授权或业务 API 正常。
 
 脚本可由既有调度系统运行并按非零退出码通知；本次没有创建外部监控账户、配置通知收件人或启动定时任务，因此仍不算告警服务已上线。
+
+## 干净源码安装验证（2026-10-11）
+
+将 check:source --list 的 95 个允许文件复制至独立目录，没有复制 node_modules、测试构建、dist 或密钥。系统 Node v23.6.1 执行 npm ci --ignore-scripts、typecheck、npm test、check:package 成功，277 测试通过；单独安装 runtime-check 后 check:workerd 的 19 项检查通过。没有 Feishu 实际请求、注册新站点或验证 Sites dispatcher。此证据仅证明该环境可从源码重建，不证明 Node 22 CI 或新租户部署完成。
