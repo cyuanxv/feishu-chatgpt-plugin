@@ -406,7 +406,10 @@ try {
   const queryTool = toolList.result.tools.find(t => t.name === "query_feishu");
   assert(queryTool.inputSchema.properties.operation.enum.includes("download_file"));
   assert(queryTool.inputSchema.properties.operation.enum.includes("download_folder"));
-  ok("bundled Worker registers download operations without module initialization cycles");
+  for (const name of ['set_sheet_font_color','merge_sheet_cells','unmerge_sheet_cells','set_sheet_column_width']) {
+    assert(toolList.result.tools.some(t => t.name === name), `missing formatting tool: ${name}`);
+  }
+  ok("bundled Worker registers download and formatting operations without module initialization cycles");
   const filesEnv = { ...bindings, DB: await mf.getD1Database("DB"), BUCKET: await mf.getR2Bucket("BUCKET") };
   const fileBytes = new Uint8Array(300000).map((_, i) => i % 251);
   const files = new CloudFiles(filesEnv, new Vault(bindings.APP_ENCRYPTION_KEY), async () => new Response(fileBytes));

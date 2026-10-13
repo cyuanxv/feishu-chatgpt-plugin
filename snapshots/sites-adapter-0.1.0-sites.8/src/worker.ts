@@ -451,7 +451,7 @@ export function createWorker(
         }
         if(url.pathname==='/api/sheet-preview') {
           assert(request.method==='POST'&&!synthetic,'method_not_allowed',405);sameOrigin(request,env);
-          const body=await requestJSON(request);object(body,['operation','request_id','parameters','connection_id']);const {operation,...args}=body;assert(['create_spreadsheet','add_worksheet','write_sheet_cells'].includes(String(operation)));
+          const body=await requestJSON(request);object(body,['operation','request_id','parameters','connection_id']);const {operation,...args}=body;assert(['set_sheet_font_color','merge_sheet_cells','unmerge_sheet_cells','set_sheet_column_width','create_spreadsheet','add_worksheet','write_sheet_cells'].includes(String(operation)));
           await store.rate(await hash(aad(p,'write-rate')),now(),10);
           return response(await new Writes(env,deps.fetcher,now).prepare(p,String(operation),args));
         }
