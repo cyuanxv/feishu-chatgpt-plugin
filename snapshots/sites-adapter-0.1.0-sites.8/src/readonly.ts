@@ -1,3 +1,5 @@
+import {ReadFailure} from "./read-failure.ts";
+export {ReadFailure} from "./read-failure.ts";
 import {FILE_SCHEMAS,FILE_REQUIREMENTS} from "./cloud-files.ts";
 import {
   EXTENDED_REQUIREMENTS,
@@ -160,15 +162,6 @@ export function readInput(args: unknown) {
   const parsed = schema.safeParse(p.data.parameters);
   assert(parsed.success);
   return { ...p.data, parameters: parsed.data as Record<string, any> };
-}
-export class ReadFailure extends AppError {
-  constructor(
-    code: string,
-    status: number,
-    readonly provider_code?: number,
-  ) {
-    super(code, status);
-  }
 }
 export class ReadonlyAPI {
   constructor(

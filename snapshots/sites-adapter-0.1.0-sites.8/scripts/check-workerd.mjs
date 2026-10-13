@@ -399,6 +399,14 @@ try {
   ok(
     "actual workerd rejects misspelled explicit data mode despite real-mode settings and stored grants",
   );
+  await mf.dispose();
+  mf = new Miniflare({ ...options(), bindings: { ...bindings, FEISHU_DOCX_ENABLED: "true" } });
+  const toolsResponse = await request("/mcp", { method: "POST", body: { jsonrpc: "2.0", id: 91, method: "tools/list", params: {} } });
+  const toolList = await toolsResponse.json();
+  const queryTool = toolList.result.tools.find(t => t.name === "query_feishu");
+  assert(queryTool.inputSchema.properties.operation.enum.includes("download_file"));
+  assert(queryTool.inputSchema.properties.operation.enum.includes("download_folder"));
+  ok("bundled Worker registers download operations without module initialization cycles");
   const filesEnv = { ...bindings, DB: await mf.getD1Database("DB"), BUCKET: await mf.getR2Bucket("BUCKET") };
   const fileBytes = new Uint8Array(300000).map((_, i) => i % 251);
   const files = new CloudFiles(filesEnv, new Vault(bindings.APP_ENCRYPTION_KEY), async () => new Response(fileBytes));

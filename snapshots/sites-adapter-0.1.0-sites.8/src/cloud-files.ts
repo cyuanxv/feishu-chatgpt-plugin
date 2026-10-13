@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {assert,AppError,aad,random,boundedText,hash,Vault,type Env,type Principal} from './security.ts';
-import {ReadFailure} from './readonly.ts';
+import {ReadFailure} from './read-failure.ts';
 import type {Fetcher} from './feishu.ts';
 const id=z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 export const FILE_SCHEMAS:Record<string,z.ZodType>={
@@ -15,6 +15,7 @@ export const FILE_REQUIREMENTS:Record<string,string[]>={download_file:['drive:fi
 export const FILE_LIMIT=10*1024*1024, JOB_LIMIT=50*1024*1024, CHUNK=128*1024;
 const enc=new TextEncoder();
 export const safeName=(s:string)=>s.replace(/[\\/\x00-\x1f\x7f:]/g,'_').replace(/^\.+/,'_').slice(0,180)||'file';
+const entryName=(name:string,token:string,type:string)=>{const n=safeName(name),dot=n.lastIndexOf('.');return type==='file'&&dot>0?n.slice(0,dot)+'__'+token+n.slice(dot):n+'__'+token};
 const b64=(b:Uint8Array)=>{let s='';for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(s)};
 const un64=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 export type FileEntry={token:string;type:string;path:string;message_id?:string;resource_type?:string;page?:string;depth?:number;ticket?:string;polls?:number;status?:string;error?:string;bytes?:number;sha256?:string;chunks?:number;artifact_id?:string;seen_pages?:string[]};
@@ -75,7 +76,7 @@ export class CloudFiles {
      if(!e.page){assert(!j.visited.includes(e.token),'folder_cycle_or_duplicate',422);j.visited.push(e.token)}
      const d=await this.json(token,'/drive/v1/files?folder_token='+encodeURIComponent(e.token)+'&page_size=50'+(e.page?'&page_token='+encodeURIComponent(e.page):''));
      assert(Array.isArray(d.files)&&typeof d.has_more==='boolean','folder_page_incomplete',502);
-     for(const f of d.files){assert(typeof f.token==='string'&&/^[A-Za-z0-9_-]+$/.test(f.token)&&typeof f.name==='string','invalid_folder_entry',502);assert(j.queue.length+j.results.length<200,'folder_entry_limit_200',422);j.queue.push({token:f.token,type:f.type,path:(e.path?e.path+'/':'')+safeName(f.name)+'__'+f.token,depth:(e.depth??0)+1})}
+     for(const f of d.files){assert(typeof f.token==='string'&&/^[A-Za-z0-9_-]+$/.test(f.token)&&typeof f.name==='string','invalid_folder_entry',502);assert(j.queue.length+j.results.length<200,'folder_entry_limit_200',422);j.queue.push({token:f.token,type:f.type,path:(e.path?e.path+'/':'')+entryName(f.name,f.token,f.type),depth:(e.depth??0)+1})}
      if(d.has_more){assert(typeof d.next_page_token==='string'&&d.next_page_token && !(e.seen_pages??[]).includes(d.next_page_token)&&d.next_page_token!==e.page,'folder_cursor_invalid',502);j.queue.push({...e,page:d.next_page_token,seen_pages:[...(e.seen_pages??[]),...(e.page?[e.page]:[])]})}
      else j.results.push({...e,status:'listed'});
     }else if(e.type==='message'){
@@ -98,7 +99,7 @@ export class CloudFiles {
  }
  async *bytes(p:Principal,j:Job,e:FileEntry){for(let seq=0;seq<(e.chunks??0);seq++){const row=await this.env.DB.prepare('SELECT payload FROM file_chunks WHERE site=? AND owner=? AND job_id=? AND file_id=? AND seq=? AND expires>?').bind(p.site,p.user,j.id,e.artifact_id,seq,this.now()).first<{payload:string}>();assert(row,'download_chunk_missing',410);const object=await this.env.BUCKET?.get(row.payload);assert(object,'download_chunk_missing',410);const v=await this.vault.open<{base64:string}>(await object.text(),aad(p,'file-chunk',j.id+':'+e.artifact_id+':'+seq),300000);yield un64(v.base64)}}
  async deliver(p:Principal,id:string,file:string,current:(connection:string,grant:string)=>Promise<unknown>){const {j}=await this.load(p,id);await current(j.connection,j.grant);assert(!j.queue.length||file!=='archive','download_pending',409);
-  const self=this;async function* output(){if(file==='archive'){yield* zipEntries(j.results.filter(e=>e.status==='succeeded').map(e=>({name:e.path,bytes:()=>self.bytes(p,j,e)})).concat([{name:'_download_manifest.json',bytes:async function*(){yield enc.encode(JSON.stringify(self.describe(p,j),null,2))}}]))}else{const e=j.results.find(e=>e.artifact_id===file&&e.status==='succeeded');assert(e,'file_not_found',404);yield* self.bytes(p,j,e)}}
+  const self=this;async function* output(){if(file==='archive'){yield* zipEntries(j.results.filter(e=>e.status==='succeeded').map(e=>({name:e.path,bytes:()=>self.bytes(p,j,e)})).concat(j.results.filter(e=>e.type==='folder'&&e.status==='listed'&&e.path).map(e=>({name:e.path+'/',bytes:async function*(){}}))).concat([{name:'_download_manifest.json',bytes:async function*(){yield enc.encode(JSON.stringify(self.describe(p,j),null,2))}}]))}else{const e=j.results.find(e=>e.artifact_id===file&&e.status==='succeeded');assert(e,'file_not_found',404);yield* self.bytes(p,j,e)}}
   const it=output();const stream=new ReadableStream<Uint8Array>({async pull(controller){try{await current(j.connection,j.grant);const n=await it.next();if(n.done)controller.close();else controller.enqueue(n.value)}catch(e){controller.error(e)}},async cancel(){await it.return(undefined)}});
   const e=j.results.find(e=>e.artifact_id===file);return new Response(stream,{headers:{'Content-Type':file==='archive'?'application/zip':'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(file==='archive'?'feishu-download.zip':safeName(e?.path.split('/').pop()??'download')),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
  }
