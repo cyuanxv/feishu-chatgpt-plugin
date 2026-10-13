@@ -12,6 +12,7 @@ export interface Database {
 }
 export interface Env {
   DB: Database;
+  BUCKET?: {put(key:string,value:string):Promise<unknown>;get(key:string):Promise<{text():Promise<string>}|null>;delete(key:string):Promise<unknown>};
   APP_ORIGIN: string;
   APP_ENCRYPTION_KEY?: string;
   FEISHU_APP_ID?: string;

@@ -1,3 +1,5 @@
+import {filesPage,filesScript} from "./files-ui.ts";
+import {CloudFiles} from "./cloud-files.ts";
 import "./runtime.ts";
 import { UnifiedSearch, SEARCH_TOOLS } from "./unified-search.ts";
 import { PlanReads, PLAN_READ_TOOLS, PLAN_READ_SCHEMAS } from "./plan-reads.ts";
@@ -443,6 +445,21 @@ export function createWorker(
           }
         }
         const p = principal(request, env);
+        if(['/files','/files.js'].includes(url.pathname)) {
+          assert(request.method==='GET'&&!synthetic,'not_found',404);
+          return new Response(url.pathname==='/files'?filesPage:filesScript,{headers:{...headers,'Content-Type':url.pathname==='/files'?'text/html; charset=utf-8':'text/javascript; charset=utf-8'}});
+        }
+        if(url.pathname==='/api/sheet-preview') {
+          assert(request.method==='POST'&&!synthetic,'method_not_allowed',405);sameOrigin(request,env);
+          const body=await requestJSON(request);object(body,['operation','request_id','parameters','connection_id']);const {operation,...args}=body;assert(['create_spreadsheet','add_worksheet','write_sheet_cells'].includes(String(operation)));
+          await store.rate(await hash(aad(p,'write-rate')),now(),10);
+          return response(await new Writes(env,deps.fetcher,now).prepare(p,String(operation),args));
+        }
+        if(url.pathname.startsWith('/api/downloads/')) {
+          assert(request.method==='GET'&&!synthetic,'method_not_allowed',405);
+          const m=url.pathname.match(/^\/api\/downloads\/([A-Za-z0-9_-]+)\/(archive|files\/([A-Za-z0-9_-]+))$/);assert(m,'not_found',404);
+          return await new CloudFiles(env,apps.vault,deps.fetcher??globalThis.fetch.bind(globalThis),now).deliver(p,m[1]!,m[3]??'archive',async(connection,grant)=>{const ctx=await apps.context(p,connection);return apps.store.current(ctx.p,grant)});
+        }
         if (
           url.pathname.startsWith("/write-review/") ||
           ["/write-review.js", "/write-review.css"].includes(url.pathname)

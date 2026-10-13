@@ -39,7 +39,17 @@ const eventFields = {
       }
     }),
 };
+const sheetRange = z.string().regex(/^[A-Za-z0-9_-]+![A-Z]{1,3}[1-9][0-9]{0,5}:[A-Z]{1,3}[1-9][0-9]{0,5}$/);
+const sheetValues = z.array(z.array(z.union([z.string().max(10000),z.number().finite(),z.boolean(),z.null()])).min(1).max(100)).min(1).max(500);
+const valueRange = z.object({range:sheetRange,values:sheetValues}).strict().refine(v=>{
+ const m=v.range.match(/!([A-Z]+)([0-9]+):([A-Z]+)([0-9]+)$/)!;
+ const col=(s:string)=>[...s].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0);
+ return Number(m[4])-Number(m[2])+1===v.values.length && v.values.every(r=>r.length===col(m[3]!)-col(m[1]!)+1);
+},'Values must exactly match the rectangular range');
 export const WRITE_SCHEMAS: Record<string, z.ZodType> = {
+  create_spreadsheet: z.object({title:z.string().min(1).max(200),folder_token:id.optional()}).strict(),
+  add_worksheet: z.object({token:id,title:z.string().min(1).max(100),index:z.number().int().min(0).max(200).optional()}).strict(),
+  write_sheet_cells: z.object({token:id,value_ranges:z.array(valueRange).min(1).max(20)}).strict().refine(v=>v.value_ranges.reduce((n,r)=>n+r.values.reduce((k,row)=>k+row.length,0),0)<=2000 && JSON.stringify(v).length<=20000,'At most 2000 cells and 20 KB per reviewed batch'),
   send_message: z
     .object({
       receive_id: id,
@@ -154,6 +164,9 @@ export const WRITE_SCHEMAS: Record<string, z.ZodType> = {
 };
 // Each inner array is an alternative group; every group must be granted.
 export const WRITE_REQUIREMENTS: Record<string, string[][]> = {
+  create_spreadsheet: [["sheets:spreadsheet:create","sheets:spreadsheet","drive:drive"]],
+  add_worksheet: [["sheets:spreadsheet","drive:drive"]],
+  write_sheet_cells: [["sheets:spreadsheet","drive:drive"]],
   send_message: [["im:message.send_as_user", "im:message"]],
   reply_message: [["im:message.send_as_user", "im:message"]],
   create_doc: [

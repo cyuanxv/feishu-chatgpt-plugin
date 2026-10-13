@@ -209,7 +209,21 @@ export class WriteProvider {
     const effects: Record<string, unknown>[] = [];
     let status: WriteReceipt["status"] = "succeeded";
     try {
-      if (operation === "send_message" || operation === "reply_message") {
+      if (operation === "create_spreadsheet") {
+        const data=await this.call(token,"/sheets/v3/spreadsheets","POST",a);
+        assert(typeof data.spreadsheet?.spreadsheet_token === "string" || typeof data.spreadsheet?.token === "string","provider_receipt_incomplete",502);
+        effects.push({token:data.spreadsheet.spreadsheet_token ?? data.spreadsheet.token,url:data.spreadsheet.url,title:a.title});
+      } else if(operation === "add_worksheet") {
+        const data=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/sheets_batch_update`,"POST",{requests:[{addSheet:{properties:{title:a.title,...(a.index!==undefined?{index:a.index}:{})}}}]});
+        const properties=data.replies?.[0]?.addSheet?.properties;
+        assert(typeof properties?.sheetId === "string","provider_receipt_incomplete",502);
+        effects.push({token:a.token,sheet_id:properties.sheetId,title:properties.title});
+      } else if(operation === "write_sheet_cells") {
+        const data=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/values_batch_update`,"POST",{valueRanges:a.value_ranges});
+        // Keep the upstream receipt; independently verify values through sheet_values.
+        assert(Array.isArray(data.responses) && data.responses.length===a.value_ranges.length,"provider_receipt_incomplete",502);
+        for(let i=0;i<data.responses.length;i++) effects.push({token:a.token,range:a.value_ranges[i].range,...data.responses[i]});
+      } else if (operation === "send_message" || operation === "reply_message") {
         const data = await this.call(
           token,
           operation === "send_message"

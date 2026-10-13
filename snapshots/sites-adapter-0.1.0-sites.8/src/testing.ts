@@ -25,3 +25,6 @@ export * from "./plan-reads.ts";
 export * from "./unified-search.ts";
 
 export { downloadEventAttachment } from "./event-attachments.ts";
+
+export * from "./cloud-files.ts";
+export * from "./files-ui.ts";

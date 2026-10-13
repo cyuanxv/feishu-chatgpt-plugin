@@ -57,6 +57,13 @@
       "when": 1791695173541,
       "tag": "0007_friendly_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791908660861,
+      "tag": "0008_colorful_toxin",
+      "breakpoints": true
     }
   ]
 }

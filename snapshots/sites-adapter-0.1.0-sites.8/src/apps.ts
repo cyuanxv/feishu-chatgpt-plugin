@@ -1,3 +1,4 @@
+import {CloudFiles,FILE_SCHEMAS} from "./cloud-files.ts";
 import { downloadEventAttachment } from "./event-attachments.ts";
 import { z } from "zod";
 import { WRITE_SCOPES } from "./write-contracts.ts";
@@ -227,7 +228,7 @@ export class Apps {
     assert(connection_id === undefined || typeof connection_id === "string");
     const input = readInput(rest),
       required = READ_REQUIREMENTS[input.operation]!;
-    if (input.cursor) assert(connection_id, "connection_reference_required");
+    if (input.cursor || ['download_continue','download_status','download_retry'].includes(input.operation)) assert(connection_id, "connection_reference_required");
     const rows = await this.rows(p);
     const active: { ctx: Awaited<ReturnType<Apps["context"]>>; row: Grant }[] =
       [];
@@ -272,6 +273,26 @@ export class Apps {
     for (const { ctx, row } of matching) {
       try {
         const access = await ctx.link.access(ctx.p, row.grant_id);
+        if (FILE_SCHEMAS[input.operation]) {
+          assert(!input.cursor,"invalid_cursor");
+          const files=new CloudFiles(this.env,this.vault,this.transport,this.now);
+          const current=()=>this.store.current(ctx.p,row.grant_id);
+          let jobId=input.parameters.job_id;
+          if(input.operation==='download_status') {
+            const {j}=await files.load(p,jobId);
+            assert(j.connection===ctx.id && j.grant===row.grant_id,'download_connection_changed',403);
+            await current();return {operation:input.operation,data:files.describe(p,j),connection_id:ctx.id};
+          }
+          if(!jobId) jobId=(await files.start(p,ctx.id,row.grant_id,input.operation,input.parameters)).id;
+          const botToken=async()=>{
+            assert(ctx.env.FEISHU_APP_ID&&ctx.env.FEISHU_APP_SECRET,'bot_configuration_required',403);
+            const r=await this.transport('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_id:ctx.env.FEISHU_APP_ID,app_secret:ctx.env.FEISHU_APP_SECRET}),redirect:'manual',signal:AbortSignal.timeout(15000)});
+            const d=JSON.parse(await boundedText(r,32768));assert(r.ok&&d.code===0&&typeof d.tenant_access_token==='string','bot_auth_failed',403);return d.tenant_access_token;
+          };
+          const result=await files.step(p,jobId,ctx.id,row.grant_id,access.token,current,botToken,input.operation==='download_retry');
+          if(!connection_id&&!input.parameters.job_id&&result.status==='partial'&&result.results.length===1&&result.results[0]?.error==='resource_access_denied') {attempts.push({connection_id:ctx.id});continue;}
+          return {operation:input.operation,data:result,connection_id:ctx.id,partial:result.partial,traversal_complete:result.traversal_complete,source:'feishu_api'};
+        }
         if (input.operation === "event_attachment_download") {
           assert(!input.cursor, "invalid_cursor");
           const downloaded = await downloadEventAttachment(this.transport, access.token, input.parameters);
