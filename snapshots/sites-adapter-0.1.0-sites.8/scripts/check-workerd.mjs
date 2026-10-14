@@ -4,7 +4,7 @@ import { readFile, readdir, mkdtemp, rm, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { Store, random, SCOPES, WRITE_SCOPES } from "../.test-build/module.mjs";
+import { Store, random, SCOPES, WRITE_SCOPES, CloudFiles, Vault } from "../.test-build/module.mjs";
 import { mock, ARGS, P } from "../test/helpers.mjs";
 const { Miniflare } = createRequire(import.meta.url)(
   process.env.MINIFLARE_MODULE ?? "../runtime-check/node_modules/miniflare",
@@ -30,6 +30,8 @@ const options = () => ({
   cf: false,
   d1Databases: { DB: "synthetic-feishu-d1" },
   d1Persist: persistence,
+  r2Buckets: { BUCKET: "synthetic-files" },
+  r2Persist: persistence + "/r2",
   bindings,
   outboundService: async (req) =>
     req.url==='https://open.feishu.cn/open-apis/task/v2/tasks?user_id_type=open_id'?(writeCalls++,Response.json({code:0,data:{task:{guid:'synthetic-task'}}})):provider.fetcher(req.url, {
@@ -397,6 +399,28 @@ try {
   ok(
     "actual workerd rejects misspelled explicit data mode despite real-mode settings and stored grants",
   );
+  await mf.dispose();
+  mf = new Miniflare({ ...options(), bindings: { ...bindings, FEISHU_DOCX_ENABLED: "true" } });
+  const toolsResponse = await request("/mcp", { method: "POST", body: { jsonrpc: "2.0", id: 91, method: "tools/list", params: {} } });
+  const toolList = await toolsResponse.json();
+  const queryTool = toolList.result.tools.find(t => t.name === "query_feishu");
+  assert(queryTool.inputSchema.properties.operation.enum.includes("download_file"));
+  assert(queryTool.inputSchema.properties.operation.enum.includes("download_folder"));
+  for (const name of ['set_sheet_font_color','merge_sheet_cells','unmerge_sheet_cells','set_sheet_column_width']) {
+    assert(toolList.result.tools.some(t => t.name === name), `missing formatting tool: ${name}`);
+  }
+  ok("bundled Worker registers download and formatting operations without module initialization cycles");
+  const filesEnv = { ...bindings, DB: await mf.getD1Database("DB"), BUCKET: await mf.getR2Bucket("BUCKET") };
+  const fileBytes = new Uint8Array(300000).map((_, i) => i % 251);
+  const files = new CloudFiles(filesEnv, new Vault(bindings.APP_ENCRYPTION_KEY), async () => new Response(fileBytes));
+  const fileJob = await files.start(P, "primary", "synthetic-grant", "download_file", { token: "synthetic-file", name: "sample.bin", file_type: "file" });
+  const completed = await files.step(P, fileJob.id, "primary", "synthetic-grant", "synthetic-token", async () => {}, async () => "synthetic-bot");
+  assert.equal(completed.status, "succeeded");
+  assert.equal(completed.results[0].chunks, 3);
+  const delivered = await files.deliver(P, fileJob.id, completed.results[0].artifact_id, async () => {});
+  assert.deepEqual(new Uint8Array(await delivered.arrayBuffer()), fileBytes);
+  await assert.rejects(() => files.deliver({ ...P, user: "another-owner" }, fileJob.id, "archive", async () => {}));
+  ok("real D1 and R2 store and deliver encrypted multi-chunk bytes with owner isolation");
   console.log(
     JSON.stringify({
       passed: count,

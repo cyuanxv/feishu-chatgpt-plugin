@@ -39,7 +39,27 @@ const eventFields = {
       }
     }),
 };
+const sheetRange = z.string().regex(/^[A-Za-z0-9_-]+![A-Z]{1,3}[1-9][0-9]{0,5}:[A-Z]{1,3}[1-9][0-9]{0,5}$/);
+const formattingRange = sheetRange.refine(v => {
+ const m=v.match(/!([A-Z]+)([0-9]+):([A-Z]+)([0-9]+)$/)!;
+ const col=(s:string)=>[...s].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0);
+ const rows=Number(m[4])-Number(m[2])+1, cols=col(m[3]!)-col(m[1]!)+1;
+ return rows>0 && cols>0 && rows<=500 && cols<=100 && rows*cols<=2000;
+}, 'Use an ordered rectangle of at most 2000 cells, 500 rows and 100 columns');
+const sheetValues = z.array(z.array(z.union([z.string().max(10000),z.number().finite(),z.boolean(),z.null()])).min(1).max(100)).min(1).max(500);
+const valueRange = z.object({range:sheetRange,values:sheetValues}).strict().refine(v=>{
+ const m=v.range.match(/!([A-Z]+)([0-9]+):([A-Z]+)([0-9]+)$/)!;
+ const col=(s:string)=>[...s].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0);
+ return Number(m[4])-Number(m[2])+1===v.values.length && v.values.every(r=>r.length===col(m[3]!)-col(m[1]!)+1);
+},'Values must exactly match the rectangular range');
 export const WRITE_SCHEMAS: Record<string, z.ZodType> = {
+  set_sheet_font_color: z.object({token:id,range:formattingRange,color:z.string().regex(/^#[0-9A-Fa-f]{6}$/)}).strict(),
+  merge_sheet_cells: z.object({token:id,range:formattingRange,merge_type:z.enum(['MERGE_ALL','MERGE_ROWS','MERGE_COLUMNS']).default('MERGE_ALL')}).strict(),
+  unmerge_sheet_cells: z.object({token:id,range:formattingRange}).strict(),
+  set_sheet_column_width: z.object({token:id,sheet_id:id,start_column:z.number().int().min(1).max(18278),end_column:z.number().int().min(1).max(18278),width_px:z.number().int().min(20).max(2000)}).strict().refine(v=>v.end_column>=v.start_column && v.end_column-v.start_column<100,'Select 1 to 100 columns, numbered from 1, inclusive'),
+  create_spreadsheet: z.object({title:z.string().min(1).max(200),folder_token:id.optional()}).strict(),
+  add_worksheet: z.object({token:id,title:z.string().min(1).max(100),index:z.number().int().min(0).max(200).optional()}).strict(),
+  write_sheet_cells: z.object({token:id,value_ranges:z.array(valueRange).min(1).max(20)}).strict().refine(v=>v.value_ranges.reduce((n,r)=>n+r.values.reduce((k,row)=>k+row.length,0),0)<=2000 && JSON.stringify(v).length<=20000,'At most 2000 cells and 20 KB per reviewed batch'),
   send_message: z
     .object({
       receive_id: id,
@@ -154,6 +174,13 @@ export const WRITE_SCHEMAS: Record<string, z.ZodType> = {
 };
 // Each inner array is an alternative group; every group must be granted.
 export const WRITE_REQUIREMENTS: Record<string, string[][]> = {
+  set_sheet_font_color: [["sheets:spreadsheet","drive:drive"]],
+  merge_sheet_cells: [["sheets:spreadsheet","drive:drive"]],
+  unmerge_sheet_cells: [["sheets:spreadsheet","drive:drive"]],
+  set_sheet_column_width: [["sheets:spreadsheet","drive:drive"]],
+  create_spreadsheet: [["sheets:spreadsheet:create","sheets:spreadsheet","drive:drive"]],
+  add_worksheet: [["sheets:spreadsheet","drive:drive"]],
+  write_sheet_cells: [["sheets:spreadsheet","drive:drive"]],
   send_message: [["im:message.send_as_user", "im:message"]],
   reply_message: [["im:message.send_as_user", "im:message"]],
   create_doc: [
@@ -207,7 +234,7 @@ export function writeRequirements(operation: string, a: Record<string, any>) {
 export const WRITE_TOOLS = Object.entries(WRITE_SCHEMAS).map(
   ([name, schema]) => ({
     name,
-    description: `Prepare ${name} for user review. Does not execute the action. Returns a private confirmation page; the user must review and confirm there. Do not call the confirmation endpoint or claim success before the final receipt. All recipients and resource IDs must be explicitly selected. Open IDs are application-scoped: use the connection_id that resolved the recipients; never reuse them through another app. For update_doc first query docx_metadata for revision, then docx_blocks to select a block.`,
+    description: `Prepare ${name} for user review. Does not execute the action. Returns a private confirmation page; the user must review and confirm there. Do not call the confirmation endpoint or claim success before the final receipt. All recipients and resource IDs must be explicitly selected. Open IDs are application-scoped: use the connection_id that resolved the recipients; never reuse them through another app. Sheet formatting uses explicit bounded ranges; column numbers are 1-based inclusive. merge_sheet_cells rejects nonempty cells outside each retained anchor; unmerge_sheet_cells reverses merging but cannot restore previously lost content. For update_doc first query docx_metadata for revision, then docx_blocks to select a block.`,
     inputSchema: {
       type: "object",
       properties: {

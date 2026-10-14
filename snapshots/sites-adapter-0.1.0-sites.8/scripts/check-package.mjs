@@ -6,7 +6,7 @@ assert(
   project_id === undefined ||
     (typeof project_id === "string" && project_id.length > 0),
 );
-assert.deepEqual(bindings, { d1: "DB", r2: null, capabilities: ["mcp"] });
+assert.deepEqual(bindings, { d1: "DB", r2: "BUCKET", capabilities: ["mcp"] });
 assert.deepEqual(
   JSON.parse(await readFile("dist/.openai/hosting.json", "utf8")),
   manifest,

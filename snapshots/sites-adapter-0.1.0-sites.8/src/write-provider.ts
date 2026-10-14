@@ -209,7 +209,44 @@ export class WriteProvider {
     const effects: Record<string, unknown>[] = [];
     let status: WriteReceipt["status"] = "succeeded";
     try {
-      if (operation === "send_message" || operation === "reply_message") {
+      if (operation === "set_sheet_font_color") {
+        const data=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/styles_batch_update`,"PUT",{data:[{ranges:[a.range],style:{foreColor:a.color}}]});
+        assert(Array.isArray(data.responses) && data.responses.length===1 && data.responses[0]?.updatedRange===a.range,"provider_receipt_incomplete",502);
+        effects.push({token:a.token,range:a.range,color:a.color,...data.responses[0]});
+      } else if(operation === "merge_sheet_cells" || operation === "unmerge_sheet_cells") {
+        if(operation === "merge_sheet_cells") {
+          // Formula rendering preserves formulas whose displayed result is empty.
+          // Feishu exposes no atomic conditional merge; refuse observed content loss.
+          const before=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/values/${encodeURIComponent(a.range)}?valueRenderOption=Formula`);
+          const vr=before.valueRange;
+          assert(vr?.range===a.range && Array.isArray(vr.values) && vr.values.every((r:unknown)=>Array.isArray(r)),"merge_preflight_incomplete",409);
+          for(let r=0;r<vr.values.length;r++) for(let c=0;c<vr.values[r].length;c++) {
+            const retained=a.merge_type==='MERGE_ROWS'?c===0:a.merge_type==='MERGE_COLUMNS'?r===0:r===0&&c===0;
+            const value=vr.values[r][c];
+            assert(retained || value===null || value==='',"merge_would_discard_content",409);
+          }
+        }
+        const data=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/${operation==='merge_sheet_cells'?'merge_cells':'unmerge_cells'}`,"POST",{range:a.range,...(operation==='merge_sheet_cells'?{mergeType:a.merge_type}:{})});
+        assert(data.spreadsheetToken===a.token,"provider_receipt_incomplete",502);
+        effects.push({token:a.token,range:a.range,merge_type:operation==='merge_sheet_cells'?a.merge_type:'UNMERGED'});
+      } else if(operation === "set_sheet_column_width") {
+        await this.call(token,`/sheets/v2/spreadsheets/${a.token}/dimension_range`,"PUT",{dimension:{sheetId:a.sheet_id,majorDimension:'COLUMNS',startIndex:a.start_column,endIndex:a.end_column},dimensionProperties:{fixedSize:a.width_px}});
+        effects.push({token:a.token,sheet_id:a.sheet_id,start_column:a.start_column,end_column:a.end_column,width_px:a.width_px});
+      } else if (operation === "create_spreadsheet") {
+        const data=await this.call(token,"/sheets/v3/spreadsheets","POST",a);
+        assert(typeof data.spreadsheet?.spreadsheet_token === "string" || typeof data.spreadsheet?.token === "string","provider_receipt_incomplete",502);
+        effects.push({token:data.spreadsheet.spreadsheet_token ?? data.spreadsheet.token,url:data.spreadsheet.url,title:a.title});
+      } else if(operation === "add_worksheet") {
+        const data=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/sheets_batch_update`,"POST",{requests:[{addSheet:{properties:{title:a.title,...(a.index!==undefined?{index:a.index}:{})}}}]});
+        const properties=data.replies?.[0]?.addSheet?.properties;
+        assert(typeof properties?.sheetId === "string","provider_receipt_incomplete",502);
+        effects.push({token:a.token,sheet_id:properties.sheetId,title:properties.title});
+      } else if(operation === "write_sheet_cells") {
+        const data=await this.call(token,`/sheets/v2/spreadsheets/${a.token}/values_batch_update`,"POST",{valueRanges:a.value_ranges});
+        // Keep the upstream receipt; independently verify values through sheet_values.
+        assert(Array.isArray(data.responses) && data.responses.length===a.value_ranges.length,"provider_receipt_incomplete",502);
+        for(let i=0;i<data.responses.length;i++) effects.push({token:a.token,range:a.value_ranges[i].range,...data.responses[i]});
+      } else if (operation === "send_message" || operation === "reply_message") {
         const data = await this.call(
           token,
           operation === "send_message"

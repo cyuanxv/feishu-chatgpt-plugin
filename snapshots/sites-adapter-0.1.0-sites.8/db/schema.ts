@@ -113,3 +113,6 @@ export const writeIntents = sqliteTable(
 export const downloadedAttachments = sqliteTable("downloaded_attachments", {
   site:text("site").notNull(), owner:text("owner").notNull(), fileId:text("file_id").notNull(), connectionId:text("connection_id").notNull(), grantId:text("grant_id").notNull(), payload:text("payload").notNull(), expires:integer("expires").notNull(),
 }, t=>[primaryKey({columns:[t.site,t.owner,t.fileId]})]);
+
+export const fileJobs=sqliteTable('file_jobs',{site:text('site').notNull(),owner:text('owner').notNull(),id:text('job_id').notNull(),payload:text('payload').notNull(),expires:integer('expires').notNull(),revision:integer('revision').notNull().default(0),lease:text('lease'),leaseUntil:integer('lease_until').notNull().default(0)},t=>[primaryKey({columns:[t.site,t.owner,t.id]})]);
+export const fileChunks=sqliteTable('file_chunks',{site:text('site').notNull(),owner:text('owner').notNull(),job:text('job_id').notNull(),file:text('file_id').notNull(),seq:integer('seq').notNull(),payload:text('payload').notNull(),expires:integer('expires').notNull()},t=>[primaryKey({columns:[t.site,t.owner,t.job,t.file,t.seq]})]);
